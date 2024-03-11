@@ -244,9 +244,12 @@ func (o *options) initModules(caelus *types.CaelusConfig, ctx *context.CaelusCon
 		o.ApiOption.loadStatsMetric(metrics.StatsMetricDiskQuota, diskquotaManager)
 	}
 	// health check manager
-	healthCheckManager = health.NewHealthManager(types.InitHealthCheckConfigFunc(&caelus.Metrics.Node,
-		&caelus.Predicts[0].ReserveResource), stStore, resourceManager, qosManager,
-		conflictMn, podInformer)
+	// xxInformer := ctx.GetxxxFactory()
+	// healthCheckManager = health.NewHealthManager(types.InitHealthCheckConfigFunc(&caelus.Metrics.Node,
+	// 	&caelus.Predicts[0].ReserveResource), stStore, resourceManager, qosManager,
+	// 	conflictMn, podInformer, xxInformer1, xxInformer2, kubeClient)
+	healthCheckManager = health.NewHealthManager(stStore, resourceManager, qosManager,
+		conflictMn, podInformer, ctx.GetKubeClient())
 	modules = append(modules, healthCheckManager)
 
 	return modules

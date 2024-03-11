@@ -31,6 +31,7 @@ import (
 	"github.com/tencent/caelus/pkg/caelus/statestore"
 	"github.com/tencent/caelus/pkg/caelus/types"
 	"github.com/tencent/caelus/pkg/caelus/util"
+	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 )
@@ -50,41 +51,34 @@ type manager struct {
 	config      *types.HealthCheckConfig
 	ruleChecker *rulecheck.Manager
 	// support linux kernel PSI, now just memory event
-	cgroupNotifier   notify.ResourceNotify
-	stStore          statestore.StateStore
-	resource         resource.Interface
-	qosManager       qos.Manager
-	conflictMn       conflict.Manager
-	podInformer      cache.SharedIndexInformer
-	configUpdateFunc func(string) (*types.HealthCheckConfig, error)
-	configHash       string
-	globalStopCh     <-chan struct{}
+	cgroupNotifier notify.ResourceNotify
+	stStore        statestore.StateStore
+	resource       resource.Interface
+	qosManager     qos.Manager
+	conflictMn     conflict.Manager
+	podInformer    cache.SharedIndexInformer
+	configHash     string
+	globalStopCh   <-chan struct{}
+	// xxxInformer1
+	// xxxInformer2
+	k8sClient clientset.Interface
 }
 
 // NewHealthManager create a new health check manager
-func NewHealthManager(configFunc func(string) (*types.HealthCheckConfig, error), stStore statestore.StateStore,
+func NewHealthManager(stStore statestore.StateStore,
 	resource resource.Interface, qosManager qos.Manager, conflictMn conflict.Manager,
-	podInformer cache.SharedIndexInformer) Manager {
-	config, err := configFunc(checkConfigFile)
-	if err != nil {
-		klog.Fatalf("failed init health check config: %v", err)
-	}
-	hash, err := hashFile(checkConfigFile)
-	if err != nil {
-		klog.Fatal(err)
-	}
+	podInformer cache.SharedIndexInformer, k8sClient clientset.Interface) Manager {
+
+	// TODO add the informer enent func
+
 	hm := &manager{
-		config:           config,
-		configUpdateFunc: configFunc,
-		stStore:          stStore,
-		resource:         resource,
-		qosManager:       qosManager,
-		conflictMn:       conflictMn,
-		podInformer:      podInformer,
-		ruleChecker: rulecheck.NewManager(config.RuleCheck, stStore, resource, qosManager, conflictMn,
-			podInformer, config.PredictReserved),
-		cgroupNotifier: notify.NewNotifyManager(&config.CgroupNotify, resource),
-		configHash:     hash,
+		stStore:     stStore,
+		resource:    resource,
+		qosManager:  qosManager,
+		conflictMn:  conflictMn,
+		podInformer: podInformer,
+		k8sClient:   k8sClient,
+		// add informer
 	}
 
 	return hm
@@ -144,16 +138,8 @@ func (h *manager) checkNeedReload(configFile string) (bool, string, *types.Healt
 
 // Run start checking health
 func (h *manager) Run(stop <-chan struct{}) {
-	if h.config.Disable {
-		klog.Warningf("health check is disabled")
-		return
-	}
 	h.globalStopCh = stop
-
-	klog.V(2).Infof("health manager running")
-	go h.ruleChecker.Run(stop)
-	go h.cgroupNotifier.Run(stop)
-	go h.configWatcher(stop)
+	<-stop
 }
 
 // configWatcher support reload rule check config dynamically, no need to restart the agent
@@ -193,4 +179,12 @@ func hashFile(filePath string) (string, error) {
 	h := hash.Sum(nil)[:16]
 	hs := hex.EncodeToString(h)
 	return hs, nil
+}
+
+func (h *manager) updateRulecheck() {
+
+}
+
+func (h *manager) updateCgroupNotifier() {
+
 }

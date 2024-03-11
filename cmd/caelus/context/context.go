@@ -33,7 +33,7 @@ type CaelusContext struct {
 	Kubeconfig              string
 	NodeName                string
 	kubeClient              clientset.Interface
-	nodeFactory, podFactory informers.SharedInformerFactory
+	nodeFactory, podFactory informers.SharedInformerFactory // TODO add xxx informers
 }
 
 const (
@@ -90,6 +90,8 @@ func (c *CaelusContext) GetNodeFactory() informers.SharedInformerFactory {
 	return c.nodeFactory
 }
 
+// TODO add GetxxxxFactory returns xxx factory
+
 // Name module name
 func (c *CaelusContext) Name() string {
 	return "ModuleContext"
@@ -105,4 +107,5 @@ func (c *CaelusContext) Run(stop <-chan struct{}) {
 		c.nodeFactory.Start(stop)
 		c.nodeFactory.WaitForCacheSync(stop)
 	}
+	// TODO run xx informers
 }
