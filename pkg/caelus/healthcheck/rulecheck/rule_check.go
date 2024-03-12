@@ -45,7 +45,8 @@ type Manager struct {
 	checkers      []ruleChecker
 	dispatcher    *dispatcher.Dispatcher
 
-	stopCh chan struct{}
+	stopCh  chan struct{}
+	rwMutex sync.RWMutex
 }
 
 // NewManager return a new rule check manager
@@ -78,6 +79,7 @@ func (r *Manager) Run(stopCh <-chan struct{}) {
 			return
 		default:
 		}
+		r.rwMutex.RLock()
 		wg := sync.WaitGroup{}
 		finalAC := &action.ActionResult{
 			UnscheduleMap:   make(map[string]bool),
@@ -98,6 +100,7 @@ func (r *Manager) Run(stopCh <-chan struct{}) {
 			}()
 		}
 		wg.Wait()
+		r.rwMutex.RUnlock()
 
 		// no need dispatch result when action is useless
 		if actionResultAvailable(finalAC) {
@@ -127,4 +130,17 @@ func actionResultAvailable(ac *action.ActionResult) bool {
 	}
 
 	return false
+}
+
+func (r *Manager) UpdateManager(config types.RuleCheck, stStore statestore.StateStore, podInformer cache.SharedIndexInformer,
+	predictReserved *types.Resource) {
+	r.rwMutex.Lock()
+	defer r.rwMutex.Unlock()
+
+	var checkers []ruleChecker
+	checkers = append(checkers, newContainerHealthChecker(stStore, podInformer, config.ContainerRules))
+	checkers = append(checkers, newNodeHealthChecker(stStore, predictReserved, config.NodeRules))
+	checkers = append(checkers, newAppHealthChecker(stStore, config.AppRules))
+
+	r.checkers = checkers
 }

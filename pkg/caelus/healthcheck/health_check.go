@@ -16,13 +16,11 @@
 package health
 
 import (
-	"crypto/md5"
-	"encoding/hex"
-	"io"
-	"os"
-	"path/filepath"
+	"context"
+	"fmt"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"strings"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/tencent/caelus/pkg/caelus/healthcheck/cgroupnotify"
 	"github.com/tencent/caelus/pkg/caelus/healthcheck/conflict"
 	"github.com/tencent/caelus/pkg/caelus/healthcheck/rulecheck"
@@ -33,7 +31,6 @@ import (
 	"github.com/tencent/caelus/pkg/caelus/util"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/klog/v2"
 )
 
 const (
@@ -89,102 +86,162 @@ func (h *manager) Name() string {
 	return "ModuleHealthCheck"
 }
 
-// reload rule check config dynamically without restarting the agent
-func (h *manager) reload() {
-	reload, hash, config := h.checkNeedReload(checkConfigFile)
-	if !reload {
-		return
-	}
-	h.configHash = hash
-	h.ruleChecker.Stop()
-	h.cgroupNotifier.Stop()
-	h.config = config
-	h.ruleChecker = rulecheck.NewManager(config.RuleCheck, h.stStore, h.resource, h.qosManager, h.conflictMn,
-		h.podInformer, config.PredictReserved)
-	h.cgroupNotifier = notify.NewNotifyManager(&config.CgroupNotify, h.resource)
-	go h.ruleChecker.Run(h.globalStopCh)
-	go h.cgroupNotifier.Run(h.globalStopCh)
-}
+//// reload rule check config dynamically without restarting the agent
+//func (h *manager) reload() {
+//	reload, hash, config := h.checkNeedReload(checkConfigFile)
+//	if !reload {
+//		return
+//	}
+//	h.configHash = hash
+//	h.ruleChecker.Stop()
+//	h.cgroupNotifier.Stop()
+//	h.config = config
+//	h.ruleChecker = rulecheck.NewManager(config.RuleCheck, h.stStore, h.resource, h.qosManager, h.conflictMn,
+//		h.podInformer, config.PredictReserved)
+//	h.cgroupNotifier = notify.NewNotifyManager(&config.CgroupNotify, h.resource)
+//	go h.ruleChecker.Run(h.globalStopCh)
+//	go h.cgroupNotifier.Run(h.globalStopCh)
+//}
 
-// checkNeedReload checks if the config file is changed
-func (h *manager) checkNeedReload(configFile string) (bool, string, *types.HealthCheckConfig) {
-	hash, err := hashFile(configFile)
-	if err != nil {
-		klog.Errorf("failed hash config file: %v", err)
-		return false, "", nil
-	}
-	if hash == h.configHash {
-		return false, "", nil
-	}
-	config, err := h.configUpdateFunc(configFile)
-	if err != nil {
-		klog.Fatalf("failed init health check config: %v", err)
-	}
-	if len(config.RuleNodes) != 0 {
-		found := false
-		for _, no := range config.RuleNodes {
-			if no == util.NodeIP() {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false, "", nil
-		}
-	}
-
-	return true, hash, config
-}
+//// checkNeedReload checks if the config file is changed
+//func (h *manager) checkNeedReload(configFile string) (bool, string, *types.HealthCheckConfig) {
+//	hash, err := hashFile(configFile)
+//	if err != nil {
+//		klog.Errorf("failed hash config file: %v", err)
+//		return false, "", nil
+//	}
+//	if hash == h.configHash {
+//		return false, "", nil
+//	}
+//	config, err := h.configUpdateFunc(configFile)
+//	if err != nil {
+//		klog.Fatalf("failed init health check config: %v", err)
+//	}
+//	if len(config.RuleNodes) != 0 {
+//		found := false
+//		for _, no := range config.RuleNodes {
+//			if no == util.NodeIP() {
+//				found = true
+//				break
+//			}
+//		}
+//		if !found {
+//			return false, "", nil
+//		}
+//	}
+//
+//	return true, hash, config
+//}
 
 // Run start checking health
 func (h *manager) Run(stop <-chan struct{}) {
+	// the function is running in the informer evnet func
 	h.globalStopCh = stop
-	<-stop
 }
 
-// configWatcher support reload rule check config dynamically, no need to restart the agent
-func (h *manager) configWatcher(stop <-chan struct{}) {
-	w, err := fsnotify.NewWatcher()
+//// configWatcher support reload rule check config dynamically, no need to restart the agent
+//func (h *manager) configWatcher(stop <-chan struct{}) {
+//	w, err := fsnotify.NewWatcher()
+//	if err != nil {
+//		klog.Fatalf("failed init fsnotify watcher: %v", err)
+//	}
+//	defer w.Close()
+//	err = w.Add(filepath.Dir(checkConfigFile))
+//	if err != nil {
+//		klog.Fatalf("failed add dir watcher(%s): %v", filepath.Dir(checkConfigFile), err)
+//	}
+//	for {
+//		select {
+//		case <-w.Events:
+//			h.reload()
+//		case err := <-w.Errors:
+//			klog.Errorf("fsnotify error: %v", err)
+//		case <-stop:
+//			return
+//		}
+//	}
+//}
+//
+//// hashFile generate hash code for the file
+//func hashFile(filePath string) (string, error) {
+//	file, err := os.Open(filePath)
+//	if err != nil {
+//		return "", err
+//	}
+//	defer file.Close()
+//	hash := md5.New()
+//	if _, err = io.Copy(hash, file); err != nil {
+//		return "", err
+//	}
+//	h := hash.Sum(nil)[:16]
+//	hs := hex.EncodeToString(h)
+//	return hs, nil
+//}
+
+// updateRuleCheck update the ruleChecker by the config
+func (h *manager) updateRuleCheck() error {
+	matched, err := h.isLabelMatched(h.config.CgroupNotify.Labels)
 	if err != nil {
-		klog.Fatalf("failed init fsnotify watcher: %v", err)
+		return err
 	}
-	defer w.Close()
-	err = w.Add(filepath.Dir(checkConfigFile))
-	if err != nil {
-		klog.Fatalf("failed add dir watcher(%s): %v", filepath.Dir(checkConfigFile), err)
-	}
-	for {
-		select {
-		case <-w.Events:
-			h.reload()
-		case err := <-w.Errors:
-			klog.Errorf("fsnotify error: %v", err)
-		case <-stop:
-			return
+
+	if matched {
+		h.ruleChecker.UpdateManager(h.config.RuleCheck, h.stStore, h.podInformer, h.config.PredictReserved)
+		if h.ruleChecker == nil {
+			h.ruleChecker.Run(h.globalStopCh)
+		}
+	} else {
+		if h.ruleChecker != nil {
+			h.ruleChecker.Stop()
+			h.ruleChecker = nil
 		}
 	}
+	return nil
 }
 
-// hashFile generate hash code for the file
-func hashFile(filePath string) (string, error) {
-	file, err := os.Open(filePath)
+// updateCgroupNotifier update the cgroupNotifier by the config
+func (h *manager) updateCgroupNotifier() error {
+	matched, err := h.isLabelMatched(h.config.CgroupNotify.Labels)
 	if err != nil {
-		return "", err
+		return err
 	}
-	defer file.Close()
-	hash := md5.New()
-	if _, err = io.Copy(hash, file); err != nil {
-		return "", err
+
+	if matched {
+		if h.cgroupNotifier != nil {
+			// in case the cgroupNotifier is not enabled in last update
+			h.cgroupNotifier.Stop()
+		}
+		h.cgroupNotifier = notify.NewNotifyManager(&h.config.CgroupNotify, h.resource)
+		go h.cgroupNotifier.Run(h.globalStopCh)
+	} else {
+		if h.cgroupNotifier != nil {
+			// if the labels does not match this node, stop the cgroupNotifier
+			h.cgroupNotifier.Stop()
+			h.cgroupNotifier = nil
+		}
 	}
-	h := hash.Sum(nil)[:16]
-	hs := hex.EncodeToString(h)
-	return hs, nil
+	return nil
 }
 
-func (h *manager) updateRulecheck() {
-
-}
-
-func (h *manager) updateCgroupNotifier() {
-
+// isLabelMatched determines whether the labels match this node
+func (h *manager) isLabelMatched(labels map[string]string) (bool, error) {
+	if len(labels) == 0 {
+		return true, nil
+	}
+	selectors := make([]string, len(labels))
+	index := 0
+	for key, val := range labels {
+		selectors[index] = fmt.Sprintf("%s=%s", key, val)
+		index += 1
+	}
+	nodes, err := h.k8sClient.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: strings.Join(selectors, ",")})
+	if err != nil {
+		return false, err
+	}
+	for _, node := range nodes.Items {
+		if node.Name == util.NodeName() {
+			return true, nil
+		}
+	}
+	return false, nil
 }
