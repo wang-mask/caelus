@@ -17,8 +17,18 @@ package v1
 
 import (
 	"encoding/json"
+
 	"github.com/tencent/caelus/pkg/util/times"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+type RuleCheckType string
+
+const (
+	AppType       RuleCheckType = "app"
+	NodeType      RuleCheckType = "node"
+	ContainerType RuleCheckType = "container"
 )
 
 // +genclient
@@ -37,7 +47,8 @@ type RuleCheck struct {
 type RuleCheckSpec struct {
 	NodeSelector map[string]string `json:"nodeSelector"`
 
-	Metrics []string `json:"metrics"`
+	Type    RuleCheckType `json:"type"`
+	Metrics []string      `json:"metrics"`
 	// CheckInterval describes the interval to trigger detection
 	CheckInterval *times.Duration `json:"checkInterval"`
 	// HandleInterval describes the interval to handle conflicts after detecting abnormal result
@@ -61,15 +72,8 @@ type DetectAction struct {
 	Args json.RawMessage `json:"args"`
 }
 
-// ActionConfig define action config
-type ActionConfig struct {
-	Name string          `json:"name"`
-	Args json.RawMessage `json:"args"`
-}
-
 // RuleCheckStatus is the status for a RuleCheck resource
 type RuleCheckStatus struct {
-	AvailableReplicas int32 `json:"availableReplicas"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
