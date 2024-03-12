@@ -91,7 +91,6 @@ type EWMAArgs struct {
 // HealthCheckConfig is the config for checking health, such as node load or online job interference
 type HealthCheckConfig struct {
 	Disable      bool         `json:"disable"`
-	RuleNodes    []string     `json:"rule_nodes"`
 	RuleCheck    RuleCheck    `json:"rule_check"`
 	CgroupNotify NotifyConfig `json:"cgroup_notify"`
 	// assign the value when initialize
@@ -107,8 +106,9 @@ type RuleCheck struct {
 
 // RuleCheckConfig define the rule config
 type RuleCheckConfig struct {
-	Name    string   `json:"name"`
-	Metrics []string `json:"metrics"`
+	Name    string            `json:"name"`
+	Metrics []string          `json:"metrics"`
+	Labels  map[string]string `json:"labels"`
 	// CheckInterval describes the interval to trigger detection
 	CheckInterval times.Duration `json:"check_interval"`
 	// HandleInterval describes the interval to handle conflicts after detecting abnormal result
@@ -142,6 +142,7 @@ type ActionConfig struct {
 // NotifyConfig monitor resource by kernel notify
 type NotifyConfig struct {
 	MemoryCgroup *MemoryNotifyConfig `json:"memory_cgroup"`
+	Labels       map[string]string   `json:"labels"`
 }
 
 // MemoryNotifyConfig describe memory cgroup notify
