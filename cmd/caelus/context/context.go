@@ -41,8 +41,7 @@ type CaelusContext struct {
 	caelusClient            caelusclient.Interface
 	nodeFactory, podFactory informers.SharedInformerFactory
 	ruleCheckFactory        caelusinformers.SharedInformerFactory
-	nodeFactory, podFactory informers.SharedInformerFactory 
-  // TODO add xxx informers
+	// TODO add xxx informers
 
 }
 

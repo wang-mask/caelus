@@ -186,9 +186,11 @@ func (h *manager) updateRuleCheck() error {
 	}
 
 	if matched {
-		h.ruleChecker.UpdateManager(h.config.RuleCheck, h.stStore, h.podInformer, h.config.PredictReserved)
 		if h.ruleChecker == nil {
+			h.ruleChecker = rulecheck.NewManager(h.config.RuleCheck, h.stStore, h.resource, h.qosManager, h.conflictMn, h.podInformer, h.config.PredictReserved)
 			h.ruleChecker.Run(h.globalStopCh)
+		} else {
+			h.ruleChecker.UpdateManager(h.config.RuleCheck, h.stStore, h.podInformer, h.config.PredictReserved)
 		}
 	} else {
 		if h.ruleChecker != nil {
