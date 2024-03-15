@@ -44,10 +44,9 @@ type CaelusContext struct {
 	caelusClient            caelusclient.Interface
 	cgroupNotifyClient      cgroupclient.Interface
 	nodeFactory, podFactory informers.SharedInformerFactory
-	ruleCheckFactory        caelusinformers.SharedInformerFactory
+	caelusFactory           caelusinformers.SharedInformerFactory
 	cgroupNotifyFactory     cgroupInformers.SharedInformerFactory
 	// TODO add xxx informers
-
 }
 
 const (
@@ -139,18 +138,18 @@ func (c *CaelusContext) GetPodFactory() informers.SharedInformerFactory {
 	return c.podFactory
 }
 
-// GetRuleCheckFactory returns ruleCheck factory
-func (c *CaelusContext) GetRuleCheckFactory() caelusinformers.SharedInformerFactory {
-	if c.ruleCheckFactory == nil {
-		c.ruleCheckFactory = caelusinformers.NewSharedInformerFactoryWithOptions(c.GetCaelusClient(), informerSyncPeriod,
+// GetCaelusFactory returns ruleCheck factory
+func (c *CaelusContext) GetCaelusFactory() caelusinformers.SharedInformerFactory {
+	if c.caelusFactory == nil {
+		c.caelusFactory = caelusinformers.NewSharedInformerFactoryWithOptions(c.GetCaelusClient(), informerSyncPeriod,
 			caelusinformers.WithTweakListOptions(func(options *metav1.ListOptions) {
 				options.FieldSelector = fields.OneTermEqualSelector(nodeNameField, c.NodeName).String()
 			}))
 	}
-	return c.ruleCheckFactory
+	return c.caelusFactory
 }
 
-// GetRuleCheckFactory returns cgroupnotify factory
+// GetCaelusFactory returns cgroupnotify factory
 func (c *CaelusContext) GetCgroupNotifyFactory() cgroupInformers.SharedInformerFactory {
 	if c.cgroupNotifyFactory == nil {
 		c.cgroupNotifyFactory = cgroupInformers.NewSharedInformerFactoryWithOptions(c.GetCgroupNotifyClient(), informerSyncPeriod,
@@ -189,9 +188,9 @@ func (c *CaelusContext) Run(stop <-chan struct{}) {
 		c.nodeFactory.Start(stop)
 		c.nodeFactory.WaitForCacheSync(stop)
 	}
-	if c.ruleCheckFactory != nil {
-		c.ruleCheckFactory.Start(stop)
-		c.ruleCheckFactory.WaitForCacheSync(stop)
+	if c.caelusFactory != nil {
+		c.caelusFactory.Start(stop)
+		c.caelusFactory.WaitForCacheSync(stop)
 	}
 	if c.cgroupNotifyFactory != nil {
 		c.cgroupNotifyFactory.Start(stop)
