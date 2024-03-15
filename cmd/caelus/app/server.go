@@ -24,7 +24,7 @@ import (
 	"github.com/tencent/caelus/pkg/caelus/checkpoint"
 	"github.com/tencent/caelus/pkg/caelus/cpi"
 	"github.com/tencent/caelus/pkg/caelus/diskquota"
-	"github.com/tencent/caelus/pkg/caelus/healthcheck"
+	health "github.com/tencent/caelus/pkg/caelus/healthcheck"
 	"github.com/tencent/caelus/pkg/caelus/healthcheck/conflict"
 	"github.com/tencent/caelus/pkg/caelus/metrics"
 	"github.com/tencent/caelus/pkg/caelus/online"
@@ -248,8 +248,10 @@ func (o *options) initModules(caelus *types.CaelusConfig, ctx *context.CaelusCon
 	// healthCheckManager = health.NewHealthManager(types.InitHealthCheckConfigFunc(&caelus.Metrics.Node,
 	// 	&caelus.Predicts[0].ReserveResource), stStore, resourceManager, qosManager,
 	// 	conflictMn, podInformer, xxInformer1, xxInformer2, kubeClient)
+	cgroupFactory := ctx.GetCgroupNotifyFactory()
+	cgroupNotifyInformer := cgroupFactory.Cgroupnotifycrd().V1().CgroupNotifyCrds()
 	healthCheckManager = health.NewHealthManager(stStore, resourceManager, qosManager,
-		conflictMn, podInformer, ctx.GetKubeClient())
+		conflictMn, podInformer, cgroupNotifyInformer, ctx.GetKubeClient())
 	modules = append(modules, healthCheckManager)
 
 	return modules

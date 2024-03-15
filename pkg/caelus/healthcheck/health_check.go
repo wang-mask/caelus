@@ -22,6 +22,15 @@ import (
 	"strings"
 
 	"github.com/tencent/caelus/pkg/caelus/healthcheck/cgroupnotify"
+	"crypto/md5"
+	"encoding/hex"
+	"io"
+	"os"
+	"path/filepath"
+
+	"github.com/fsnotify/fsnotify"
+	cgroupCrd "github.com/tencent/caelus/pkg/apis/cgroupnotifycrd/v1"
+	notify "github.com/tencent/caelus/pkg/caelus/healthcheck/cgroupnotify"
 	"github.com/tencent/caelus/pkg/caelus/healthcheck/conflict"
 	"github.com/tencent/caelus/pkg/caelus/healthcheck/rulecheck"
 	"github.com/tencent/caelus/pkg/caelus/qos"
@@ -29,6 +38,9 @@ import (
 	"github.com/tencent/caelus/pkg/caelus/statestore"
 	"github.com/tencent/caelus/pkg/caelus/types"
 	"github.com/tencent/caelus/pkg/caelus/util"
+	cgroupInformer "github.com/tencent/caelus/pkg/cgroupClient/informers/externalversions/cgroupnotifycrd/v1"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 )
@@ -57,6 +69,7 @@ type manager struct {
 	configHash     string
 	globalStopCh   <-chan struct{}
 	// xxxInformer1
+	cgroupInformer cgroupInformer.CgroupNotifyCrdInformer
 	// xxxInformer2
 	k8sClient clientset.Interface
 }
@@ -64,7 +77,8 @@ type manager struct {
 // NewHealthManager create a new health check manager
 func NewHealthManager(stStore statestore.StateStore,
 	resource resource.Interface, qosManager qos.Manager, conflictMn conflict.Manager,
-	podInformer cache.SharedIndexInformer, k8sClient clientset.Interface) Manager {
+	podInformer cache.SharedIndexInformer, cgroupInformer cgroupInformer.CgroupNotifyCrdInformer,
+	k8sClient clientset.Interface) Manager {
 
 	// TODO add the informer enent func
 
@@ -76,7 +90,14 @@ func NewHealthManager(stStore statestore.StateStore,
 		podInformer: podInformer,
 		k8sClient:   k8sClient,
 		// add informer
+		cgroupInformer: cgroupInformer,
 	}
+
+	hm.cgroupInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    hm.OnAddCgropNotify,
+		UpdateFunc: hm.OnUpdateCgropNotify,
+		DeleteFunc: hm.OnDeleteCgropNotify,
+	})
 
 	return hm
 }
@@ -246,4 +267,89 @@ func (h *manager) isLabelMatched(labels map[string]string) (bool, error) {
 		}
 	}
 	return false, nil
+func (h *manager) OnAddCgropNotify(obj interface{}) {
+	h.updateCgroupConfig(obj, false)
+	h.updateCgroupNotifier()
+}
+
+func (h *manager) OnUpdateCgropNotify(oldObj, newObj interface{}) {
+	h.updateCgroupConfig(newObj, false)
+	h.updateCgroupNotifier()
+}
+
+func (h *manager) OnDeleteCgropNotify(obj interface{}) {
+	h.updateCgroupConfig(obj, true)
+	h.updateCgroupNotifier()
+}
+
+func (h *manager) updateRulecheck() {
+
+}
+
+func (h *manager) updateCgroupNotifier() {
+
+}
+
+func (h *manager) HasNode(cgroupCrd *cgroupCrd.CgroupNotifyCrd) (bool, error) {
+	nodeSelector := cgroupCrd.Spec.NodeSelector
+	nodes, err := h.k8sClient.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{
+		LabelSelector: metav1.FormatLabelSelector(&nodeSelector),
+	})
+	if err != nil {
+		return false, err
+	}
+
+	found := false
+	for _, n := range nodes.Items {
+		if n.Name == util.NodeName() {
+			found = true
+			break
+		}
+	}
+	return found, nil
+}
+
+func (h *manager) CgroupCrddeepCopy(cgroupCrd *cgroupCrd.CgroupNotifyCrd) {
+	pressures := make([]types.MemoryPressureNotifyConfig, 0)
+	for _, p := range cgroupCrd.Spec.MemoryCgroup.Pressures {
+		newP := types.MemoryPressureNotifyConfig{}
+		newP.Cgroups = p.Cgroups
+		newP.Count = p.Count
+		newP.Duration = p.Duration
+		newP.PressureLevel = p.PressureLevel
+		pressures = append(pressures, newP)
+	}
+	usages := make([]types.MemoryUsageNotifyConfig, 0)
+	for _, u := range cgroupCrd.Spec.MemoryCgroup.Usages {
+		newU := types.MemoryUsageNotifyConfig{}
+		newU.Cgroups = u.Cgroups
+		newU.Duration = u.Duration
+		newU.MarginMb = u.MarginMb
+		usages = append(usages, newU)
+	}
+	h.config.CgroupNotify.MemoryCgroup.Pressures = pressures
+	h.config.CgroupNotify.MemoryCgroup.Usages = usages
+}
+
+func (h *manager) updateCgroupConfig(obj interface{}, isDelete bool) {
+	object := obj.(metav1.Object)
+	ownerRef := metav1.GetControllerOf(object)
+	cgroupCrd, err := h.cgroupInformer.Lister().CgroupNotifyCrds(object.GetNamespace()).Get(ownerRef.Name)
+	if err != nil {
+		klog.Error("get cgroupNotifyCrd failed")
+		return
+	}
+	found, err := h.HasNode(cgroupCrd)
+	if err != nil {
+		klog.Error("get Nodes failed: %v", err)
+		return
+	}
+	if !found {
+		return
+	}
+	if isDelete {
+		h.config.CgroupNotify = types.NotifyConfig{}
+	} else {
+		h.CgroupCrddeepCopy(cgroupCrd)
+	}
 }

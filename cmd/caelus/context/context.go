@@ -18,6 +18,9 @@ package context
 import (
 	"time"
 
+	cgroupclient "github.com/tencent/caelus/pkg/cgroupClient/clientset/versioned"
+	cgroupfake "github.com/tencent/caelus/pkg/cgroupClient/clientset/versioned/fake"
+	cgroupInformers "github.com/tencent/caelus/pkg/cgroupClient/informers/externalversions"
 	caelusclient "github.com/tencent/caelus/pkg/generated/clientset/versioned"
 	caelusfake "github.com/tencent/caelus/pkg/generated/clientset/versioned/fake"
 	caelusinformers "github.com/tencent/caelus/pkg/generated/informers/externalversions"
@@ -39,8 +42,10 @@ type CaelusContext struct {
 	NodeName                string
 	kubeClient              clientset.Interface
 	caelusClient            caelusclient.Interface
+	cgroupNotifyClient      cgroupclient.Interface
 	nodeFactory, podFactory informers.SharedInformerFactory
 	ruleCheckFactory        caelusinformers.SharedInformerFactory
+	cgroupNotifyFactory     cgroupInformers.SharedInformerFactory
 	// TODO add xxx informers
 
 }
@@ -84,6 +89,22 @@ func (c *CaelusContext) lazyInit() {
 			c.caelusClient = caelusclient.NewForConfigOrDie(kubeconfig)
 		}
 	}
+
+	// init cgroupnotifycrd client
+	if c.cgroupNotifyClient == nil {
+		err = nil
+		if kubeconfig == nil {
+			kubeconfig, err = clientcmd.BuildConfigFromFlags(c.Master, c.Kubeconfig)
+		}
+		if err != nil {
+			klog.Warning(err)
+			klog.Warning("fall back to creating fake caelus-client")
+			// create a fake client to test caelus without k8s
+			c.cgroupNotifyClient = cgroupfake.NewSimpleClientset()
+		} else {
+			c.cgroupNotifyClient = cgroupclient.NewForConfigOrDie(kubeconfig)
+		}
+	}
 }
 
 // GetKubeClient returns k8s client
@@ -96,6 +117,12 @@ func (c *CaelusContext) GetKubeClient() clientset.Interface {
 func (c *CaelusContext) GetCaelusClient() caelusclient.Interface {
 	c.lazyInit()
 	return c.caelusClient
+}
+
+// GetCaelusClient returns CgroupNotify client
+func (c *CaelusContext) GetCgroupNotifyClient() cgroupclient.Interface {
+	c.lazyInit()
+	return c.cgroupNotifyClient
 }
 
 // GetPodFactory returns pod factory
@@ -121,6 +148,17 @@ func (c *CaelusContext) GetRuleCheckFactory() caelusinformers.SharedInformerFact
 			}))
 	}
 	return c.ruleCheckFactory
+}
+
+// GetRuleCheckFactory returns cgroupnotify factory
+func (c *CaelusContext) GetCgroupNotifyFactory() cgroupInformers.SharedInformerFactory {
+	if c.cgroupNotifyFactory == nil {
+		c.cgroupNotifyFactory = cgroupInformers.NewSharedInformerFactoryWithOptions(c.GetCgroupNotifyClient(), informerSyncPeriod,
+			cgroupInformers.WithTweakListOptions(func(options *metav1.ListOptions) {
+				options.FieldSelector = fields.OneTermEqualSelector(nodeNameField, c.NodeName).String()
+			}))
+	}
+	return c.cgroupNotifyFactory
 }
 
 // GetNodeFactory returns node factory
@@ -154,6 +192,10 @@ func (c *CaelusContext) Run(stop <-chan struct{}) {
 	if c.ruleCheckFactory != nil {
 		c.ruleCheckFactory.Start(stop)
 		c.ruleCheckFactory.WaitForCacheSync(stop)
+	}
+	if c.cgroupNotifyFactory != nil {
+		c.cgroupNotifyFactory.Start(stop)
+		c.cgroupNotifyFactory.WaitForCacheSync(stop)
 	}
 	// TODO run xx informers
 }
