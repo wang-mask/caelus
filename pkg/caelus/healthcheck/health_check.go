@@ -18,11 +18,12 @@ package health
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
-	notify "github.com/tencent/caelus/pkg/caelus/healthcheck/cgroupnotify"
-
+	v1 "github.com/tencent/caelus/pkg/apis/caelus/v1"
 	cgroupCrd "github.com/tencent/caelus/pkg/apis/cgroupnotifycrd/v1"
+	notify "github.com/tencent/caelus/pkg/caelus/healthcheck/cgroupnotify"
 	"github.com/tencent/caelus/pkg/caelus/healthcheck/conflict"
 	"github.com/tencent/caelus/pkg/caelus/healthcheck/rulecheck"
 	"github.com/tencent/caelus/pkg/caelus/qos"
@@ -31,6 +32,7 @@ import (
 	"github.com/tencent/caelus/pkg/caelus/types"
 	"github.com/tencent/caelus/pkg/caelus/util"
 	cgroupInformer "github.com/tencent/caelus/pkg/cgroupClient/informers/externalversions/cgroupnotifycrd/v1"
+	caelusclient "github.com/tencent/caelus/pkg/generated/clientset/versioned"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
@@ -53,24 +55,24 @@ type manager struct {
 	config      *types.HealthCheckConfig
 	ruleChecker *rulecheck.Manager
 	// support linux kernel PSI, now just memory event
-	cgroupNotifier notify.ResourceNotify
-	stStore        statestore.StateStore
-	resource       resource.Interface
-	qosManager     qos.Manager
-	conflictMn     conflict.Manager
-	podInformer    cache.SharedIndexInformer
-	configHash     string
-	globalStopCh   <-chan struct{}
-	// xxxInformer1
-	cgroupInformer cgroupInformer.CgroupNotifyCrdInformer
-	// xxxInformer2
-	k8sClient clientset.Interface
+	cgroupNotifier    notify.ResourceNotify
+	stStore           statestore.StateStore
+	resource          resource.Interface
+	qosManager        qos.Manager
+	conflictMn        conflict.Manager
+	podInformer       cache.SharedIndexInformer
+	configHash        string
+	globalStopCh      <-chan struct{}
+	ruleCheckInformer cache.SharedIndexInformer
+	caelusClient      caelusclient.Clientset
+	cgroupInformer    cgroupInformer.CgroupNotifyCrdInformer
+	k8sClient         clientset.Interface
 }
 
 // NewHealthManager create a new health check manager
 func NewHealthManager(stStore statestore.StateStore,
 	resource resource.Interface, qosManager qos.Manager, conflictMn conflict.Manager,
-	podInformer cache.SharedIndexInformer, cgroupInformer cgroupInformer.CgroupNotifyCrdInformer,
+	podInformer cache.SharedIndexInformer, ruleCheckInformer cache.SharedIndexInformer, cgroupInformer cgroupInformer.CgroupNotifyCrdInformer,
 	k8sClient clientset.Interface) Manager {
 
 	// TODO add the informer enent func
@@ -83,7 +85,17 @@ func NewHealthManager(stStore statestore.StateStore,
 		podInformer: podInformer,
 		k8sClient:   k8sClient,
 		// add informer
-		cgroupInformer: cgroupInformer,
+		ruleCheckInformer: ruleCheckInformer,
+		cgroupInformer:    cgroupInformer,
+	}
+
+	_, err := hm.ruleCheckInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    nil,
+		UpdateFunc: nil,
+		DeleteFunc: nil,
+	})
+	if err != nil {
+		return nil
 	}
 
 	hm.cgroupInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -313,4 +325,82 @@ func (h *manager) updateCgroupConfig(obj interface{}, isDelete bool) {
 	} else {
 		h.CgroupCrddeepCopy(cgroupCrd)
 	}
+}
+
+// update local RuleCheck
+func (h *manager) updateRuleCheckConfig() error {
+	ctx := context.Background()
+	list, err := h.caelusClient.CaelusV1().RuleChecks("caelus-system").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	ruleChecks := list.Items
+	sort.Slice(ruleChecks, func(i, j int) bool {
+		return ruleChecks[i].CreationTimestamp.Time.After(ruleChecks[i].CreationTimestamp.Time)
+	})
+
+	m := map[string]struct{}{}
+	appRuleChecks := []*types.RuleCheckConfig{}
+	nodeRuleChecks := []*types.RuleCheckConfig{}
+	containerRuleChecks := []*types.RuleCheckConfig{}
+	for _, k8sRuleCheck := range ruleChecks {
+		name := string(k8sRuleCheck.Spec.Type) + ":" + k8sRuleCheck.Spec.Name
+		if _, ok := m[name]; ok {
+			continue
+		}
+		ruleCheck := &types.RuleCheckConfig{}
+		convertK8sRuleCheck(&k8sRuleCheck, ruleCheck)
+		switch k8sRuleCheck.Spec.Type {
+		case v1.AppType:
+			appRuleChecks = append(appRuleChecks, ruleCheck)
+		case v1.NodeType:
+			nodeRuleChecks = append(nodeRuleChecks, ruleCheck)
+		case v1.ContainerType:
+			containerRuleChecks = append(containerRuleChecks, ruleCheck)
+		}
+	}
+	h.config.RuleCheck.AppRules = appRuleChecks
+	h.config.RuleCheck.NodeRules = nodeRuleChecks
+	h.config.RuleCheck.ContainerRules = containerRuleChecks
+	return nil
+}
+
+// convert v1.RuleCheck struct to types.RuleCheckConfig struct
+func convertK8sRuleCheck(k8sRuleCheck *v1.RuleCheck, ruleCheck *types.RuleCheckConfig) {
+	convertRules := func(k8sRules []*v1.DetectActionRules) []*types.DetectActionConfig {
+		rules := make([]*types.DetectActionConfig, 0, len(k8sRuleCheck.Spec.Rules))
+		for _, k8sRule := range k8sRules {
+			rule := &types.DetectActionConfig{
+				Detects: make([]*types.DetectConfig, 0, len(k8sRule.Detects)),
+				Actions: make([]*types.ActionConfig, 0, len(k8sRule.Actions)),
+			}
+			for _, detect := range k8sRule.Detects {
+				rule.Detects = append(rule.Detects, &types.DetectConfig{
+					Name:    detect.Name,
+					ArgsStr: detect.Args,
+					Args:    nil,
+				})
+			}
+			for _, action := range k8sRule.Actions {
+				rule.Actions = append(rule.Actions, &types.ActionConfig{
+					Name:    action.Name,
+					ArgsStr: action.Args,
+					Args:    nil,
+				})
+			}
+			rules = append(rules, rule)
+		}
+		return rules
+	}
+
+	ruleCheck.Rules = convertRules(k8sRuleCheck.Spec.Rules)
+	ruleCheck.RecoverRules = convertRules(k8sRuleCheck.Spec.RecoverRules)
+
+	ruleCheck.Name = k8sRuleCheck.Name
+	ruleCheck.Metrics = k8sRuleCheck.Spec.Metrics
+	ruleCheck.CheckInterval = *k8sRuleCheck.Spec.CheckInterval
+
+	ruleCheck.RecoverInterval = *k8sRuleCheck.Spec.RecoverInterval
+	ruleCheck.HandleInterval = *k8sRuleCheck.Spec.HandleInterval
+	ruleCheck.NodeSelector = k8sRuleCheck.Spec.NodeSelector
 }
