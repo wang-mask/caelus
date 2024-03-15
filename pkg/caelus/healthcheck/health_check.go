@@ -18,19 +18,11 @@ package health
 import (
 	"context"
 	"fmt"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"strings"
 
-	"github.com/tencent/caelus/pkg/caelus/healthcheck/cgroupnotify"
-	"crypto/md5"
-	"encoding/hex"
-	"io"
-	"os"
-	"path/filepath"
-
-	"github.com/fsnotify/fsnotify"
-	cgroupCrd "github.com/tencent/caelus/pkg/apis/cgroupnotifycrd/v1"
 	notify "github.com/tencent/caelus/pkg/caelus/healthcheck/cgroupnotify"
+
+	cgroupCrd "github.com/tencent/caelus/pkg/apis/cgroupnotifycrd/v1"
 	"github.com/tencent/caelus/pkg/caelus/healthcheck/conflict"
 	"github.com/tencent/caelus/pkg/caelus/healthcheck/rulecheck"
 	"github.com/tencent/caelus/pkg/caelus/qos"
@@ -43,6 +35,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/klog"
 )
 
 const (
@@ -267,6 +260,8 @@ func (h *manager) isLabelMatched(labels map[string]string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
 func (h *manager) OnAddCgropNotify(obj interface{}) {
 	h.updateCgroupConfig(obj, false)
 	h.updateCgroupNotifier()
@@ -280,33 +275,6 @@ func (h *manager) OnUpdateCgropNotify(oldObj, newObj interface{}) {
 func (h *manager) OnDeleteCgropNotify(obj interface{}) {
 	h.updateCgroupConfig(obj, true)
 	h.updateCgroupNotifier()
-}
-
-func (h *manager) updateRulecheck() {
-
-}
-
-func (h *manager) updateCgroupNotifier() {
-
-}
-
-func (h *manager) HasNode(cgroupCrd *cgroupCrd.CgroupNotifyCrd) (bool, error) {
-	nodeSelector := cgroupCrd.Spec.NodeSelector
-	nodes, err := h.k8sClient.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{
-		LabelSelector: metav1.FormatLabelSelector(&nodeSelector),
-	})
-	if err != nil {
-		return false, err
-	}
-
-	found := false
-	for _, n := range nodes.Items {
-		if n.Name == util.NodeName() {
-			found = true
-			break
-		}
-	}
-	return found, nil
 }
 
 func (h *manager) CgroupCrddeepCopy(cgroupCrd *cgroupCrd.CgroupNotifyCrd) {
@@ -329,6 +297,7 @@ func (h *manager) CgroupCrddeepCopy(cgroupCrd *cgroupCrd.CgroupNotifyCrd) {
 	}
 	h.config.CgroupNotify.MemoryCgroup.Pressures = pressures
 	h.config.CgroupNotify.MemoryCgroup.Usages = usages
+	h.config.CgroupNotify.Labels = cgroupCrd.Spec.NodeSelector.MatchLabels
 }
 
 func (h *manager) updateCgroupConfig(obj interface{}, isDelete bool) {
@@ -337,14 +306,6 @@ func (h *manager) updateCgroupConfig(obj interface{}, isDelete bool) {
 	cgroupCrd, err := h.cgroupInformer.Lister().CgroupNotifyCrds(object.GetNamespace()).Get(ownerRef.Name)
 	if err != nil {
 		klog.Error("get cgroupNotifyCrd failed")
-		return
-	}
-	found, err := h.HasNode(cgroupCrd)
-	if err != nil {
-		klog.Error("get Nodes failed: %v", err)
-		return
-	}
-	if !found {
 		return
 	}
 	if isDelete {
