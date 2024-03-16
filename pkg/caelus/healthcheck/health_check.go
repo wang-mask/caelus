@@ -43,8 +43,8 @@ import (
 
 const (
 	checkConfigFile = "/etc/caelus/rules.json"
-	ruleCheck = "RuleCheck"
-	cgroupNotify = "CgroupNotify"
+	ruleCheck       = "RuleCheck"
+	cgroupNotify    = "CgroupNotify"
 )
 
 // Manager is the interface for handling health check
@@ -97,7 +97,7 @@ func NewHealthManager(stStore statestore.StateStore,
 	}
 
 	_, err := hm.ruleCheckInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) {
+		AddFunc: func(obj interface{}) {
 			hm.eventFunc([]string{ruleCheck})
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
@@ -111,7 +111,7 @@ func NewHealthManager(stStore statestore.StateStore,
 		return nil
 	}
 	hm.nodeInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) {
+		AddFunc: func(obj interface{}) {
 			hm.eventFunc([]string{ruleCheck, cgroupNotify})
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
@@ -123,7 +123,7 @@ func NewHealthManager(stStore statestore.StateStore,
 	})
 
 	hm.cgroupInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) {
+		AddFunc: func(obj interface{}) {
 			hm.eventFunc([]string{cgroupNotify})
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
@@ -142,9 +142,9 @@ func (h *manager) Name() string {
 	return "ModuleHealthCheck"
 }
 
-func(h *manager) eventFunc(crds string[])func(obj interface{}){
-	return func(obj interface{}){
-		for crd := range crds{
+func (h *manager) eventFunc(crds []string) func(obj interface{}) {
+	return func(obj interface{}) {
+		for crd := range crds {
 			h.workqueue.Add(crd)
 		}
 	}
