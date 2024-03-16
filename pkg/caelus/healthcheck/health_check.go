@@ -37,11 +37,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 )
 
 const (
 	checkConfigFile = "/etc/caelus/rules.json"
+	ruleCheck = "RuleCheck"
+	cgroupNotify = "CgroupNotify"
 )
 
 // Manager is the interface for handling health check
@@ -61,6 +64,8 @@ type manager struct {
 	qosManager        qos.Manager
 	conflictMn        conflict.Manager
 	podInformer       cache.SharedIndexInformer
+	nodeInformer      cache.SharedIndexInformer
+	workqueue         workqueue.RateLimitingInterface
 	configHash        string
 	globalStopCh      <-chan struct{}
 	ruleCheckInformer cache.SharedIndexInformer
@@ -72,36 +77,61 @@ type manager struct {
 // NewHealthManager create a new health check manager
 func NewHealthManager(stStore statestore.StateStore,
 	resource resource.Interface, qosManager qos.Manager, conflictMn conflict.Manager,
-	podInformer cache.SharedIndexInformer, ruleCheckInformer cache.SharedIndexInformer, cgroupInformer cgroupInformer.CgroupNotifyCrdInformer,
+	podInformer cache.SharedIndexInformer, nodeInformer cache.SharedIndexInformer, ruleCheckInformer cache.SharedIndexInformer, cgroupInformer cgroupInformer.CgroupNotifyCrdInformer,
 	k8sClient clientset.Interface) Manager {
 
 	// TODO add the informer enent func
 
 	hm := &manager{
-		stStore:     stStore,
-		resource:    resource,
-		qosManager:  qosManager,
-		conflictMn:  conflictMn,
-		podInformer: podInformer,
-		k8sClient:   k8sClient,
+		stStore:      stStore,
+		resource:     resource,
+		qosManager:   qosManager,
+		conflictMn:   conflictMn,
+		podInformer:  podInformer,
+		nodeInformer: nodeInformer,
+		workqueue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "health-check-queue"),
+		k8sClient:    k8sClient,
 		// add informer
 		ruleCheckInformer: ruleCheckInformer,
 		cgroupInformer:    cgroupInformer,
 	}
 
 	_, err := hm.ruleCheckInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    nil,
-		UpdateFunc: nil,
-		DeleteFunc: nil,
+		AddFunc:    func(obj interface{}) {
+			hm.eventFunc([]string{ruleCheck})
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			hm.eventFunc([]string{ruleCheck})
+		},
+		DeleteFunc: func(obj interface{}) {
+			hm.eventFunc([]string{ruleCheck})
+		},
 	})
 	if err != nil {
 		return nil
 	}
+	hm.nodeInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) {
+			hm.eventFunc([]string{ruleCheck, cgroupNotify})
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			hm.eventFunc([]string{ruleCheck, cgroupNotify})
+		},
+		DeleteFunc: func(obj interface{}) {
+			hm.eventFunc([]string{ruleCheck, cgroupNotify})
+		},
+	})
 
 	hm.cgroupInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    hm.OnAddCgropNotify,
-		UpdateFunc: hm.OnUpdateCgropNotify,
-		DeleteFunc: hm.OnDeleteCgropNotify,
+		AddFunc:    func(obj interface{}) {
+			hm.eventFunc([]string{cgroupNotify})
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			hm.eventFunc([]string{cgroupNotify})
+		},
+		DeleteFunc: func(obj interface{}) {
+			hm.eventFunc([]string{cgroupNotify})
+		},
 	})
 
 	return hm
@@ -110,6 +140,14 @@ func NewHealthManager(stStore statestore.StateStore,
 // Name returns the module name
 func (h *manager) Name() string {
 	return "ModuleHealthCheck"
+}
+
+func(h *manager) eventFunc(crds string[])func(obj interface{}){
+	return func(obj interface{}){
+		for crd := range crds{
+			h.workqueue.Add(crd)
+		}
+	}
 }
 
 //// reload rule check config dynamically without restarting the agent
@@ -163,6 +201,47 @@ func (h *manager) Name() string {
 func (h *manager) Run(stop <-chan struct{}) {
 	// the function is running in the informer evnet func
 	h.globalStopCh = stop
+	go h.runWorker(stop)
+}
+
+func (h *manager) runWorker() {
+	for h.processNextWorkItem() {
+	}
+}
+
+func (h *manager) processNextWorkItem() bool {
+	select {
+	case <-h.globalStopCh:
+		h.workqueue.ShutDown()
+		return false
+	default:
+	}
+	obj, shutdown := h.workqueue.Get()
+
+	if shutdown {
+		return false
+	}
+
+	key, ok := obj.(string)
+	if !ok {
+		h.workqueue.Forget(obj)
+		h.workqueue.Done(obj)
+		klog.Errorf("Health check queue item expects string but got %#v", obj)
+		return true
+	}
+
+	if err := h.syncHandler(key); err != nil {
+		h.workqueue.AddRateLimited(key)
+		return true
+	}
+
+	h.workqueue.Done(obj)
+	return true
+}
+
+func (h *manager) syncHandler(key string) error {
+
+	return nil
 }
 
 //// configWatcher support reload rule check config dynamically, no need to restart the agent
