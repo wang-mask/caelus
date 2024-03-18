@@ -47,6 +47,7 @@ type RuleCheck struct {
 type RuleCheckSpec struct {
 	Name         string               `json:"name"`
 	NodeSelector metav1.LabelSelector `json:"nodeSelector"`
+	Priority     *int32               `json:"priority"`
 	Type         RuleCheckType        `json:"type"`
 	Metrics      []string             `json:"metrics"`
 	// CheckInterval describes the interval to trigger detection

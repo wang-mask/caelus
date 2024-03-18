@@ -348,6 +348,7 @@ func (h *manager) updateRuleCheckConfig() error {
 		if _, ok := m[name]; ok {
 			continue
 		}
+		m[name] = struct{}{}
 		ruleCheck := &types.RuleCheckConfig{}
 		convertK8sRuleCheck(&k8sRuleCheck, ruleCheck)
 		switch k8sRuleCheck.Spec.Type {
