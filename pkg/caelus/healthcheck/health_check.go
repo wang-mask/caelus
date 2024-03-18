@@ -36,7 +36,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels2 "k8s.io/apimachinery/pkg/labels"
 	informerv1 "k8s.io/client-go/informers/core/v1"
-	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
@@ -66,69 +65,75 @@ type manager struct {
 	conflictMn        conflict.Manager
 	podInformer       cache.SharedIndexInformer
 	nodeInformer      informerv1.NodeInformer
+	ruleCheckInformer caelusv1.RuleCheckInformer
+	cgroupInformer    cgroupInformer.CgroupNotifyCrdInformer
 	workqueue         workqueue.RateLimitingInterface
 	configHash        string
 	globalStopCh      <-chan struct{}
-	ruleCheckInformer caelusv1.RuleCheckInformer
-	cgroupInformer    cgroupInformer.CgroupNotifyCrdInformer
-	k8sClient         clientset.Interface
 }
 
 // NewHealthManager create a new health check manager
 func NewHealthManager(stStore statestore.StateStore,
 	resource resource.Interface, qosManager qos.Manager, conflictMn conflict.Manager,
-	podInformer cache.SharedIndexInformer, nodeInformer informerv1.NodeInformer, ruleCheckInformer caelusv1.RuleCheckInformer, cgroupInformer cgroupInformer.CgroupNotifyCrdInformer,
-	k8sClient clientset.Interface) Manager {
-
-	// TODO add the informer enent func
+	podInformer cache.SharedIndexInformer, nodeInformer informerv1.NodeInformer,
+	ruleCheckInformer caelusv1.RuleCheckInformer, cgroupInformer cgroupInformer.CgroupNotifyCrdInformer) Manager {
 
 	hm := &manager{
-		stStore:      stStore,
-		resource:     resource,
-		qosManager:   qosManager,
-		conflictMn:   conflictMn,
-		podInformer:  podInformer,
-		nodeInformer: nodeInformer,
-		workqueue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "health-check-queue"),
-		k8sClient:    k8sClient,
-		// add informer
+		stStore:           stStore,
+		resource:          resource,
+		qosManager:        qosManager,
+		conflictMn:        conflictMn,
+		podInformer:       podInformer,
+		nodeInformer:      nodeInformer,
+		workqueue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "health-check-queue"),
 		ruleCheckInformer: ruleCheckInformer,
 		cgroupInformer:    cgroupInformer,
 	}
 
 	_, err := hm.ruleCheckInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			hm.eventFunc([]string{ruleCheck})
+			hm.eventFunc([]interface{}{obj}, ruleCheck)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			hm.eventFunc([]string{ruleCheck})
+			hm.eventFunc([]interface{}{oldObj, newObj}, ruleCheck)
 		},
 		DeleteFunc: func(obj interface{}) {
-			hm.eventFunc([]string{ruleCheck})
+			hm.eventFunc([]interface{}{obj}, ruleCheck)
 		},
 	})
 	if err != nil {
+		klog.Error("Failed to add RuleCheck event func", err)
 		return nil
 	}
-	hm.nodeInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+
+	_, err = hm.nodeInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			if isLocalEventAndLabelChanged(oldObj, newObj) {
-				hm.eventFunc([]string{ruleCheck, cgroupNotify})
+			if isLocalNodeEventAndLabelChanged(oldObj, newObj) {
+				hm.workqueue.Add(cgroupNotify)
+				hm.workqueue.Add(ruleCheck)
 			}
 		},
 	})
+	if err != nil {
+		klog.Error("Failed to add Node event func", err)
+		return nil
+	}
 
-	hm.cgroupInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, err = hm.cgroupInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			hm.eventFunc([]string{cgroupNotify})
+			hm.eventFunc([]interface{}{obj}, cgroupNotify)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			hm.eventFunc([]string{cgroupNotify})
+			hm.eventFunc([]interface{}{oldObj, newObj}, cgroupNotify)
 		},
 		DeleteFunc: func(obj interface{}) {
-			hm.eventFunc([]string{cgroupNotify})
+			hm.eventFunc([]interface{}{obj}, cgroupNotify)
 		},
 	})
+	if err != nil {
+		klog.Error("Failed to add CgroupNotify event func", err)
+		return nil
+	}
 
 	return hm
 }
@@ -138,11 +143,10 @@ func (h *manager) Name() string {
 	return "ModuleHealthCheck"
 }
 
-func (h *manager) eventFunc(crds []string) func(obj interface{}) {
-	return func(obj interface{}) {
-		for crd := range crds {
-			h.workqueue.Add(crd)
-		}
+// filter the event affects local node and add cr type to the queue
+func (h *manager) eventFunc(crs []interface{}, crd string) {
+	if h.isAffectingLocalNode(crs) {
+		h.workqueue.Add(crd)
 	}
 }
 
@@ -150,6 +154,11 @@ func (h *manager) eventFunc(crds []string) func(obj interface{}) {
 func (h *manager) Run(stop <-chan struct{}) {
 	// the function is running in the informer evnet func
 	h.globalStopCh = stop
+
+	// init the ruleCheck and cgroupNotify for new node
+	h.workqueue.Add(cgroupNotify)
+	h.workqueue.Add(ruleCheck)
+
 	go h.runWorker()
 }
 
@@ -180,8 +189,7 @@ func (h *manager) processNextWorkItem() bool {
 	}
 
 	if err := h.syncHandler(key); err != nil {
-		h.workqueue.AddRateLimited(key)
-		return true
+		h.workqueue.Add(key)
 	}
 
 	h.workqueue.Done(obj)
@@ -189,73 +197,47 @@ func (h *manager) processNextWorkItem() bool {
 }
 
 func (h *manager) syncHandler(key string) error {
+	if key == ruleCheck {
+		err := h.updateRuleCheckConfig()
+		if err != nil {
+			return err
+		}
+		h.reRunRuleCheck()
+	} else if key == cgroupNotify {
+		//err := h.updateCgroupConfig()
+		//if err != nil{
+		//	return err
+		//}
+		//h.reRunCgroupNotifier()
+	}
 
 	return nil
 }
 
-// updateRuleCheck update the ruleChecker by the config
-func (h *manager) reRunRuleCheck() error {
-	matched, err := h.isLabelMatchedLocalNode(h.config.CgroupNotify.Labels)
-	if err != nil {
-		return err
+// reRunRuleCheck update and rerun the ruleChecker by the config
+func (h *manager) reRunRuleCheck() {
+	if h.ruleChecker != nil {
+		h.ruleChecker.Stop()
 	}
 
-	if matched {
-		if h.ruleChecker == nil {
-			h.ruleChecker = rulecheck.NewManager(h.config.RuleCheck, h.stStore, h.resource, h.qosManager, h.conflictMn, h.podInformer, h.config.PredictReserved)
-			h.ruleChecker.Run(h.globalStopCh)
-		} else {
-			h.ruleChecker.UpdateManager(h.config.RuleCheck, h.stStore, h.podInformer, h.config.PredictReserved)
-		}
-	} else {
-		if h.ruleChecker != nil {
-			h.ruleChecker.Stop()
-			h.ruleChecker = nil
-		}
+	h.ruleChecker = rulecheck.NewManager(h.config.RuleCheck, h.stStore, h.resource, h.qosManager, h.conflictMn, h.podInformer, h.config.PredictReserved)
+
+	if h.ruleChecker != nil {
+		go h.ruleChecker.Run(h.globalStopCh)
 	}
-	return nil
 }
 
-// updateCgroupNotifier update the cgroupNotifier by the config
-func (h *manager) reRunCgroupNotifier() error {
-	matched, err := h.isLabelMatchedLocalNode(h.config.CgroupNotify.Labels)
-	if err != nil {
-		return err
+// reRunCgroupNotifier update and rerun the cgroupNotifier by the config
+func (h *manager) reRunCgroupNotifier() {
+	if h.cgroupNotifier != nil {
+		h.cgroupNotifier.Stop()
 	}
 
-	if matched {
-		if h.cgroupNotifier != nil {
-			// in case the cgroupNotifier is not enabled in last update
-			h.cgroupNotifier.Stop()
-		}
-		h.cgroupNotifier = notify.NewNotifyManager(&h.config.CgroupNotify, h.resource)
+	h.cgroupNotifier = notify.NewNotifyManager(&h.config.CgroupNotify, h.resource)
+
+	if h.cgroupNotifier != nil {
 		go h.cgroupNotifier.Run(h.globalStopCh)
-	} else {
-		if h.cgroupNotifier != nil {
-			// if the labels does not match this node, stop the cgroupNotifier
-			h.cgroupNotifier.Stop()
-			h.cgroupNotifier = nil
-		}
 	}
-	return nil
-}
-
-// isLabelMatched determines whether the labels match this node
-func (h *manager) isLabelMatchedLocalNode(labels map[string]string) (bool, error) {
-	if len(labels) == 0 {
-		return true, nil
-	}
-
-	node, err := h.nodeInformer.Lister().Get(util.NodeName())
-	if err != nil {
-		return false, err
-	}
-	for key, val := range labels {
-		if val != node.Labels[key] {
-			return false, nil
-		}
-	}
-	return true, nil
 }
 
 func (h *manager) OnAddCgropNotify(obj interface{}) {
@@ -395,20 +377,54 @@ func convertK8sRuleCheck(k8sRuleCheck *v1.RuleCheck, ruleCheck *types.RuleCheckC
 	ruleCheck.NodeSelector = k8sRuleCheck.Spec.NodeSelector
 }
 
-// determine whether this event happened in local node and label changed
-func isLocalEventAndLabelChanged(oldObj, newObj interface{}) bool {
-	old, ok := oldObj.(*corev1.Node)
+// determine whether this cr event impacts this node
+func (h *manager) isAffectingLocalNode(objs []interface{}) bool {
+	for _, obj := range objs {
+		if cgroupCr, ok := obj.(cgroupCrd.CgroupNotifyCrd); ok {
+			if matched, err := h.isLabelMatchedLocalNode(cgroupCr.Labels); matched || err != nil {
+				return true
+			}
+		} else if ruleCheckCr, ok := obj.(v1.RuleCheck); ok {
+			if matched, err := h.isLabelMatchedLocalNode(ruleCheckCr.Labels); matched || err != nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isLabelMatched determines whether the labels match this node
+func (h *manager) isLabelMatchedLocalNode(labels map[string]string) (bool, error) {
+	if len(labels) == 0 {
+		return true, nil
+	}
+
+	node, err := h.nodeInformer.Lister().Get(util.NodeName())
+	if err != nil {
+		return false, err
+	}
+	for key, val := range labels {
+		if val != node.Labels[key] {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// determine whether this node event happened in local node and label changed
+func isLocalNodeEventAndLabelChanged(oldObj, newObj interface{}) bool {
+	oldCr, ok := oldObj.(*corev1.Node)
 	if !ok {
 		return false
 	}
-	new, ok := newObj.(*corev1.Node)
+	newCr, ok := newObj.(*corev1.Node)
 	if !ok {
 		return false
 	}
 
-	if new.Name != util.NodeName() {
+	if newCr.Name != util.NodeName() {
 		return false
 	}
 
-	return !reflect.DeepEqual(old.Labels, new.Labels)
+	return !reflect.DeepEqual(oldCr.Labels, newCr.Labels)
 }
