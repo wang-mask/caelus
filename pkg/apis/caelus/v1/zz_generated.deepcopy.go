@@ -150,6 +150,11 @@ func (in *RuleCheckList) DeepCopyObject() runtime.Object {
 func (in *RuleCheckSpec) DeepCopyInto(out *RuleCheckSpec) {
 	*out = *in
 	in.NodeSelector.DeepCopyInto(&out.NodeSelector)
+	if in.Priority != nil {
+		in, out := &in.Priority, &out.Priority
+		*out = new(int32)
+		**out = **in
+	}
 	if in.Metrics != nil {
 		in, out := &in.Metrics, &out.Metrics
 		*out = make([]string, len(*in))
