@@ -249,7 +249,7 @@ func (o *options) initModules(caelus *types.CaelusConfig, ctx *context.CaelusCon
 	// 	&caelus.Predicts[0].ReserveResource), stStore, resourceManager, qosManager,
 	// 	conflictMn, podInformer, xxInformer1, xxInformer2, kubeClient)
 	nodeInformer := ctx.GetNodeFactory().Core().V1().Nodes()
-	ruleCheckInformer := ctx.GetCaelusFactory().Caelus().V1().RuleChecks().Informer()
+	ruleCheckInformer := ctx.GetCaelusFactory().Caelus().V1().RuleChecks()
 	cgroupNotifyInformer := ctx.GetCgroupNotifyFactory().Cgroupnotifycrd().V1().CgroupNotifyCrds()
 	healthCheckManager = health.NewHealthManager(stStore, resourceManager, qosManager,
 		conflictMn, podInformer, nodeInformer, ruleCheckInformer, cgroupNotifyInformer, ctx.GetKubeClient())

@@ -16,7 +16,9 @@
 package health
 
 import (
-	"context"
+	"reflect"
+	"sort"
+
 	v1 "github.com/tencent/caelus/pkg/apis/caelus/v1"
 	cgroupCrd "github.com/tencent/caelus/pkg/apis/cgroupnotifycrd/v1"
 	notify "github.com/tencent/caelus/pkg/caelus/healthcheck/cgroupnotify"
@@ -28,12 +30,11 @@ import (
 	"github.com/tencent/caelus/pkg/caelus/types"
 	"github.com/tencent/caelus/pkg/caelus/util"
 	cgroupInformer "github.com/tencent/caelus/pkg/cgroupClient/informers/externalversions/cgroupnotifycrd/v1"
-	caelusclient "github.com/tencent/caelus/pkg/generated/clientset/versioned"
-	"reflect"
-	"sort"
+	caelusv1 "github.com/tencent/caelus/pkg/generated/informers/externalversions/caelus/v1"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	labels2 "k8s.io/apimachinery/pkg/labels"
 	informerv1 "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -68,8 +69,7 @@ type manager struct {
 	workqueue         workqueue.RateLimitingInterface
 	configHash        string
 	globalStopCh      <-chan struct{}
-	ruleCheckInformer cache.SharedIndexInformer
-	caelusClient      caelusclient.Clientset
+	ruleCheckInformer caelusv1.RuleCheckInformer
 	cgroupInformer    cgroupInformer.CgroupNotifyCrdInformer
 	k8sClient         clientset.Interface
 }
@@ -77,7 +77,7 @@ type manager struct {
 // NewHealthManager create a new health check manager
 func NewHealthManager(stStore statestore.StateStore,
 	resource resource.Interface, qosManager qos.Manager, conflictMn conflict.Manager,
-	podInformer cache.SharedIndexInformer, nodeInformer informerv1.NodeInformer, ruleCheckInformer cache.SharedIndexInformer, cgroupInformer cgroupInformer.CgroupNotifyCrdInformer,
+	podInformer cache.SharedIndexInformer, nodeInformer informerv1.NodeInformer, ruleCheckInformer caelusv1.RuleCheckInformer, cgroupInformer cgroupInformer.CgroupNotifyCrdInformer,
 	k8sClient clientset.Interface) Manager {
 
 	// TODO add the informer enent func
@@ -96,7 +96,7 @@ func NewHealthManager(stStore statestore.StateStore,
 		cgroupInformer:    cgroupInformer,
 	}
 
-	_, err := hm.ruleCheckInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, err := hm.ruleCheckInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			hm.eventFunc([]string{ruleCheck})
 		},
@@ -313,14 +313,16 @@ func (h *manager) updateCgroupConfig(obj interface{}, isDelete bool) {
 
 // update local RuleCheck
 func (h *manager) updateRuleCheckConfig() error {
-	ctx := context.Background()
-	list, err := h.caelusClient.CaelusV1().RuleChecks("caelus-system").List(ctx, metav1.ListOptions{})
+	ruleChecks, err := h.ruleCheckInformer.Lister().RuleChecks(types.CaelusNamespace).List(labels2.SelectorFromSet(nil))
 	if err != nil {
 		return err
 	}
-	ruleChecks := list.Items
 	sort.Slice(ruleChecks, func(i, j int) bool {
-		return ruleChecks[i].CreationTimestamp.Time.After(ruleChecks[i].CreationTimestamp.Time)
+		if *(ruleChecks[i].Spec.Priority) == *(ruleChecks[j].Spec.Priority) {
+			return ruleChecks[i].CreationTimestamp.Time.After(ruleChecks[i].CreationTimestamp.Time)
+		} else {
+			return *(ruleChecks[i].Spec.Priority) > *(ruleChecks[j].Spec.Priority)
+		}
 	})
 
 	m := map[string]struct{}{}
@@ -328,13 +330,16 @@ func (h *manager) updateRuleCheckConfig() error {
 	nodeRuleChecks := []*types.RuleCheckConfig{}
 	containerRuleChecks := []*types.RuleCheckConfig{}
 	for _, k8sRuleCheck := range ruleChecks {
+		if ok, err := h.isLabelMatchedLocalNode(k8sRuleCheck.Spec.NodeSelector.MatchLabels); err != nil || !ok {
+			continue
+		}
 		name := string(k8sRuleCheck.Spec.Type) + ":" + k8sRuleCheck.Spec.Name
 		if _, ok := m[name]; ok {
 			continue
 		}
 		m[name] = struct{}{}
 		ruleCheck := &types.RuleCheckConfig{}
-		convertK8sRuleCheck(&k8sRuleCheck, ruleCheck)
+		convertK8sRuleCheck(k8sRuleCheck, ruleCheck)
 		switch k8sRuleCheck.Spec.Type {
 		case v1.AppType:
 			appRuleChecks = append(appRuleChecks, ruleCheck)
