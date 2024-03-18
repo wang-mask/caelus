@@ -88,6 +88,7 @@ func NewHealthManager(stStore statestore.StateStore,
 		workqueue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "health-check-queue"),
 		ruleCheckInformer: ruleCheckInformer,
 		cgroupInformer:    cgroupInformer,
+		config:            &types.HealthCheckConfig{},
 	}
 
 	_, err := hm.ruleCheckInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
