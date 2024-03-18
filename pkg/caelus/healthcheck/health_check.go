@@ -78,7 +78,11 @@ func NewHealthManager(stStore statestore.StateStore,
 	podInformer cache.SharedIndexInformer, nodeInformer informerv1.NodeInformer,
 	ruleCheckInformer caelusv1.RuleCheckInformer, cgroupInformer cgroupInformer.CgroupNotifyCrdInformer) Manager {
 
+	config := &types.HealthCheckConfig{}
 	hm := &manager{
+		config:            config,
+		ruleChecker:       rulecheck.NewManager(config.RuleCheck, stStore, resource, qosManager, conflictMn, podInformer, config.PredictReserved),
+		cgroupNotifier:    notify.NewNotifyManager(&config.CgroupNotify, resource),
 		stStore:           stStore,
 		resource:          resource,
 		qosManager:        qosManager,
