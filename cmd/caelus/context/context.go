@@ -171,8 +171,6 @@ func (c *CaelusContext) GetNodeFactory() informers.SharedInformerFactory {
 	return c.nodeFactory
 }
 
-// TODO add GetxxxxFactory returns xxx factory
-
 // Name module name
 func (c *CaelusContext) Name() string {
 	return "ModuleContext"
@@ -196,5 +194,4 @@ func (c *CaelusContext) Run(stop <-chan struct{}) {
 		c.cgroupNotifyFactory.Start(stop)
 		c.cgroupNotifyFactory.WaitForCacheSync(stop)
 	}
-	// TODO run xx informers
 }
