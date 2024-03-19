@@ -6,7 +6,7 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.14.0
   name: rulechecks.caelus.io
 spec:
-  group: caelus.io.
+  group: caelus.io
   names:
     kind: RuleCheck
     listKind: RuleCheckList
