@@ -78,7 +78,13 @@ func NewHealthManager(stStore statestore.StateStore,
 	podInformer cache.SharedIndexInformer, nodeInformer informerv1.NodeInformer,
 	ruleCheckInformer caelusv1.RuleCheckInformer, cgroupInformer cgroupInformer.CgroupNotifyCrdInformer) Manager {
 
-	config := &types.HealthCheckConfig{}
+	config := &types.HealthCheckConfig{
+		RuleCheck: types.RuleCheck{
+			ContainerRules: []*types.RuleCheckConfig{},
+			NodeRules:      []*types.RuleCheckConfig{},
+			AppRules:       []*types.RuleCheckConfig{},
+		},
+	}
 	hm := &manager{
 		config:            config,
 		ruleChecker:       rulecheck.NewManager(config.RuleCheck, stStore, resource, qosManager, conflictMn, podInformer, config.PredictReserved),
@@ -92,7 +98,6 @@ func NewHealthManager(stStore statestore.StateStore,
 		workqueue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "health-check-queue"),
 		ruleCheckInformer: ruleCheckInformer,
 		cgroupInformer:    cgroupInformer,
-		config:            &types.HealthCheckConfig{},
 	}
 
 	_, err := hm.ruleCheckInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
