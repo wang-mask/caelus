@@ -211,6 +211,7 @@ func (h *manager) processNextWorkItem() bool {
 }
 
 func (h *manager) syncHandler(key string) error {
+	klog.Infof("---- Start syncHandler %v: %v", key, *h.config)
 	if key == ruleCheck {
 		err := h.updateRuleCheckConfig()
 		if err != nil {
@@ -225,6 +226,7 @@ func (h *manager) syncHandler(key string) error {
 		//h.reRunCgroupNotifier()
 	}
 
+	klog.Infof("---- After syncHandler %v: %v", key, *h.config)
 	return nil
 }
 
@@ -256,17 +258,17 @@ func (h *manager) reRunCgroupNotifier() {
 
 func (h *manager) OnAddCgropNotify(obj interface{}) {
 	h.updateCgroupConfig(obj, false)
-	h.updateCgroupNotifier()
+	h.reRunCgroupNotifier()
 }
 
 func (h *manager) OnUpdateCgropNotify(oldObj, newObj interface{}) {
 	h.updateCgroupConfig(newObj, false)
-	h.updateCgroupNotifier()
+	h.reRunCgroupNotifier()
 }
 
 func (h *manager) OnDeleteCgropNotify(obj interface{}) {
 	h.updateCgroupConfig(obj, true)
-	h.updateCgroupNotifier()
+	h.reRunCgroupNotifier()
 }
 
 func (h *manager) CgroupCrddeepCopy(cgroupCrd *cgroupCrd.CgroupNotifyCrd) {
@@ -395,12 +397,12 @@ func (h *manager) convertK8sRuleCheck(k8sRuleCheck *v1.RuleCheck, ruleCheck *typ
 // determine whether this cr event impacts this node
 func (h *manager) isAffectingLocalNode(objs []interface{}) bool {
 	for _, obj := range objs {
-		if cgroupCr, ok := obj.(cgroupCrd.CgroupNotifyCrd); ok {
-			if matched, err := h.isLabelMatchedLocalNode(cgroupCr.Labels); matched || err != nil {
+		if cgroupCr, ok := obj.(*cgroupCrd.CgroupNotifyCrd); ok {
+			if matched, err := h.isLabelMatchedLocalNode(cgroupCr.Spec.NodeSelector); matched || err != nil {
 				return true
 			}
-		} else if ruleCheckCr, ok := obj.(v1.RuleCheck); ok {
-			if matched, err := h.isLabelMatchedLocalNode(ruleCheckCr.Labels); matched || err != nil {
+		} else if ruleCheckCr, ok := obj.(*v1.RuleCheck); ok {
+			if matched, err := h.isLabelMatchedLocalNode(ruleCheckCr.Spec.NodeSelector); matched || err != nil {
 				return true
 			}
 		}
