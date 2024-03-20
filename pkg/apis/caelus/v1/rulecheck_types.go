@@ -16,8 +16,6 @@
 package v1
 
 import (
-	"encoding/json"
-
 	"github.com/tencent/caelus/pkg/util/times"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -69,8 +67,8 @@ type DetectActionRules struct {
 
 // DetectAction define detector config
 type DetectAction struct {
-	Name string          `json:"name"`
-	Args json.RawMessage `json:"args"`
+	Name string `json:"name"`
+	Args string `json:"args"`
 }
 
 // RuleCheckStatus is the status for a RuleCheck resource

@@ -17,7 +17,7 @@ spec:
     - name: v1
       schema:
         openAPIV3Schema:
-          description: RuleCheck is the Schema for the rulechecks API
+          description: RuleCheck is a specification for a RuleCheck resource
           properties:
             apiVersion:
               description: |-
@@ -37,7 +37,7 @@ spec:
             metadata:
               type: object
             spec:
-              description: RuleCheckSpec defines the desired state of RuleCheck
+              description: RuleCheckSpec is the spec for a RuleCheck resource
               properties:
                 checkInterval:
                   description: CheckInterval describes the interval to trigger detection
@@ -52,13 +52,58 @@ spec:
                   items:
                     type: string
                   type: array
+                name:
+                  type: string
                 nodeSelector:
-                  additionalProperties:
-                    type: string
                   description: |-
-                    INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-                    Important: Run "make" to regenerate code after modifying this file
+                    A label selector is a label query over a set of resources. The result of matchLabels and
+                    matchExpressions are ANDed. An empty label selector matches all objects. A null
+                    label selector matches no objects.
+                  properties:
+                    matchExpressions:
+                      description: matchExpressions is a list of label selector requirements.
+                        The requirements are ANDed.
+                      items:
+                        description: |-
+                          A label selector requirement is a selector that contains values, a key, and an operator that
+                          relates the key and values.
+                        properties:
+                          key:
+                            description: key is the label key that the selector applies
+                              to.
+                            type: string
+                          operator:
+                            description: |-
+                              operator represents a key's relationship to a set of values.
+                              Valid operators are In, NotIn, Exists and DoesNotExist.
+                            type: string
+                          values:
+                            description: |-
+                              values is an array of string values. If the operator is In or NotIn,
+                              the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                              the values array must be empty. This array is replaced during a strategic
+                              merge patch.
+                            items:
+                              type: string
+                            type: array
+                        required:
+                          - key
+                          - operator
+                        type: object
+                      type: array
+                    matchLabels:
+                      additionalProperties:
+                        type: string
+                      description: |-
+                        matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                        map is equivalent to an element of matchExpressions, whose key field is "key", the
+                        operator is "In", and the values array contains only "value". The requirements are ANDed.
+                      type: object
                   type: object
+                  x-kubernetes-map-type: atomic
+                priority:
+                  format: int32
+                  type: integer
                 recoverInterval:
                   description: RecoverInterval describes the interval to recover conflicts
                     after detecting normal result
@@ -73,11 +118,6 @@ spec:
                           description: DetectAction define detector config
                           properties:
                             args:
-                              description: |-
-                                RawMessage is a raw encoded JSON value.
-                                It implements Marshaler and Unmarshaler and can
-                                be used to delay JSON decoding or precompute a JSON encoding.
-                              format: byte
                               type: string
                             name:
                               type: string
@@ -91,11 +131,6 @@ spec:
                           description: DetectAction define detector config
                           properties:
                             args:
-                              description: |-
-                                RawMessage is a raw encoded JSON value.
-                                It implements Marshaler and Unmarshaler and can
-                                be used to delay JSON decoding or precompute a JSON encoding.
-                              format: byte
                               type: string
                             name:
                               type: string
@@ -104,9 +139,6 @@ spec:
                             - name
                           type: object
                         type: array
-                    required:
-                      - actions
-                      - detects
                     type: object
                   type: array
                 rules:
@@ -118,11 +150,6 @@ spec:
                           description: DetectAction define detector config
                           properties:
                             args:
-                              description: |-
-                                RawMessage is a raw encoded JSON value.
-                                It implements Marshaler and Unmarshaler and can
-                                be used to delay JSON decoding or precompute a JSON encoding.
-                              format: byte
                               type: string
                             name:
                               type: string
@@ -136,11 +163,6 @@ spec:
                           description: DetectAction define detector config
                           properties:
                             args:
-                              description: |-
-                                RawMessage is a raw encoded JSON value.
-                                It implements Marshaler and Unmarshaler and can
-                                be used to delay JSON decoding or precompute a JSON encoding.
-                              format: byte
                               type: string
                             name:
                               type: string
@@ -149,31 +171,25 @@ spec:
                             - name
                           type: object
                         type: array
-                    required:
-                      - actions
-                      - detects
                     type: object
                   type: array
                 type:
-                  enum:
-                    - app
-                    - node
-                    - container
                   type: string
               required:
                 - checkInterval
                 - handleInterval
                 - metrics
-                - nodeSelector
+                - name
+                - priority
                 - recoverInterval
                 - rules
                 - type
               type: object
             status:
-              description: RuleCheckStatus defines the observed state of RuleCheck
+              description: RuleCheckStatus is the status for a RuleCheck resource
               type: object
+          required:
+            - spec
           type: object
       served: true
       storage: true
-      subresources:
-        status: {}

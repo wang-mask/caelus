@@ -359,14 +359,14 @@ func convertK8sRuleCheck(k8sRuleCheck *v1.RuleCheck, ruleCheck *types.RuleCheckC
 			for _, detect := range k8sRule.Detects {
 				rule.Detects = append(rule.Detects, &types.DetectConfig{
 					Name:    detect.Name,
-					ArgsStr: detect.Args,
+					ArgsStr: []byte(detect.Args),
 					Args:    nil,
 				})
 			}
 			for _, action := range k8sRule.Actions {
 				rule.Actions = append(rule.Actions, &types.ActionConfig{
 					Name:    action.Name,
-					ArgsStr: action.Args,
+					ArgsStr: []byte(action.Args),
 					Args:    nil,
 				})
 			}
