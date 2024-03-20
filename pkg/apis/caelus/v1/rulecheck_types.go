@@ -43,11 +43,11 @@ type RuleCheck struct {
 
 // RuleCheckSpec is the spec for a RuleCheck resource
 type RuleCheckSpec struct {
-	Name         string               `json:"name"`
-	NodeSelector metav1.LabelSelector `json:"nodeSelector"`
-	Priority     *int32               `json:"priority"`
-	Type         RuleCheckType        `json:"type"`
-	Metrics      []string             `json:"metrics"`
+	Name         string            `json:"name"`
+	NodeSelector map[string]string `json:"nodeSelector"`
+	Priority     *int32            `json:"priority"`
+	Type         RuleCheckType     `json:"type"`
+	Metrics      []string          `json:"metrics"`
 	// CheckInterval describes the interval to trigger detection
 	CheckInterval *times.Duration `json:"checkInterval"`
 	// HandleInterval describes the interval to handle conflicts after detecting abnormal result

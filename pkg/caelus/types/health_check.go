@@ -25,7 +25,6 @@ import (
 	"github.com/tencent/caelus/pkg/caelus/util/machine"
 	"github.com/tencent/caelus/pkg/util/times"
 
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 )
@@ -108,7 +107,7 @@ type RuleCheck struct {
 // RuleCheckConfig define the rule config
 type RuleCheckConfig struct {
 	Name         string            `json:"name"`
-	NodeSelector v1.LabelSelector  `json:"node_selector"`
+	NodeSelector map[string]string `json:"node_selector"`
 	Metrics      []string          `json:"metrics"`
 	Labels       map[string]string `json:"labels"`
 	// CheckInterval describes the interval to trigger detection
