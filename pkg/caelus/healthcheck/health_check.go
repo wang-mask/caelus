@@ -328,7 +328,7 @@ func (h *manager) updateRuleCheckConfig() error {
 	nodeRuleChecks := []*types.RuleCheckConfig{}
 	containerRuleChecks := []*types.RuleCheckConfig{}
 	for _, k8sRuleCheck := range ruleChecks {
-		if ok, err := h.isLabelMatchedLocalNode(k8sRuleCheck.Spec.NodeSelector.MatchLabels); err != nil || !ok {
+		if ok, err := h.isLabelMatchedLocalNode(k8sRuleCheck.Spec.NodeSelector); err != nil || !ok {
 			continue
 		}
 		name := string(k8sRuleCheck.Spec.Type) + ":" + k8sRuleCheck.Spec.Name
@@ -398,7 +398,7 @@ func (h *manager) convertK8sRuleCheck(k8sRuleCheck *v1.RuleCheck, ruleCheck *typ
 func (h *manager) isAffectingLocalNode(objs []interface{}) bool {
 	for _, obj := range objs {
 		if cgroupCr, ok := obj.(*cgroupCrd.CgroupNotifyCrd); ok {
-			if matched, err := h.isLabelMatchedLocalNode(cgroupCr.Spec.NodeSelector); matched || err != nil {
+			if matched, err := h.isLabelMatchedLocalNode(cgroupCr.Spec.NodeSelector.MatchLabels); matched || err != nil {
 				return true
 			}
 		} else if ruleCheckCr, ok := obj.(*v1.RuleCheck); ok {
