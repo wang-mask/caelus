@@ -141,10 +141,7 @@ func (c *CaelusContext) GetPodFactory() informers.SharedInformerFactory {
 // GetCaelusFactory returns ruleCheck factory
 func (c *CaelusContext) GetCaelusFactory() caelusinformers.SharedInformerFactory {
 	if c.caelusFactory == nil {
-		c.caelusFactory = caelusinformers.NewSharedInformerFactoryWithOptions(c.GetCaelusClient(), informerSyncPeriod,
-			caelusinformers.WithTweakListOptions(func(options *metav1.ListOptions) {
-				options.FieldSelector = fields.OneTermEqualSelector(nodeNameField, c.NodeName).String()
-			}))
+		c.caelusFactory = caelusinformers.NewSharedInformerFactoryWithOptions(c.GetCaelusClient(), informerSyncPeriod)
 	}
 	return c.caelusFactory
 }

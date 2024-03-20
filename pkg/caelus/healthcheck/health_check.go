@@ -58,25 +58,27 @@ type manager struct {
 	config      *types.HealthCheckConfig
 	ruleChecker *rulecheck.Manager
 	// support linux kernel PSI, now just memory event
-	cgroupNotifier    notify.ResourceNotify
-	stStore           statestore.StateStore
-	resource          resource.Interface
-	qosManager        qos.Manager
-	conflictMn        conflict.Manager
-	podInformer       cache.SharedIndexInformer
-	nodeInformer      informerv1.NodeInformer
-	ruleCheckInformer caelusv1.RuleCheckInformer
-	cgroupInformer    cgroupInformer.CgroupNotifyCrdInformer
-	workqueue         workqueue.RateLimitingInterface
-	configHash        string
-	globalStopCh      <-chan struct{}
+	cgroupNotifier         notify.ResourceNotify
+	stStore                statestore.StateStore
+	resource               resource.Interface
+	qosManager             qos.Manager
+	conflictMn             conflict.Manager
+	podInformer            cache.SharedIndexInformer
+	nodeInformer           informerv1.NodeInformer
+	ruleCheckInformer      caelusv1.RuleCheckInformer
+	cgroupInformer         cgroupInformer.CgroupNotifyCrdInformer
+	workqueue              workqueue.RateLimitingInterface
+	configHash             string
+	globalStopCh           <-chan struct{}
+	ruleCheckAvailableFunc func(ruleCheck *types.RuleCheckConfig)
 }
 
 // NewHealthManager create a new health check manager
 func NewHealthManager(stStore statestore.StateStore,
 	resource resource.Interface, qosManager qos.Manager, conflictMn conflict.Manager,
 	podInformer cache.SharedIndexInformer, nodeInformer informerv1.NodeInformer,
-	ruleCheckInformer caelusv1.RuleCheckInformer, cgroupInformer cgroupInformer.CgroupNotifyCrdInformer) Manager {
+	ruleCheckInformer caelusv1.RuleCheckInformer, cgroupInformer cgroupInformer.CgroupNotifyCrdInformer,
+	resourceType *types.Resource, ruleCheckAvailableFunc func(ruleCheck *types.RuleCheckConfig)) Manager {
 
 	config := &types.HealthCheckConfig{
 		RuleCheck: types.RuleCheck{
@@ -84,20 +86,22 @@ func NewHealthManager(stStore statestore.StateStore,
 			NodeRules:      []*types.RuleCheckConfig{},
 			AppRules:       []*types.RuleCheckConfig{},
 		},
+		PredictReserved: resourceType,
 	}
 	hm := &manager{
-		config:            config,
-		ruleChecker:       rulecheck.NewManager(config.RuleCheck, stStore, resource, qosManager, conflictMn, podInformer, config.PredictReserved),
-		cgroupNotifier:    notify.NewNotifyManager(&config.CgroupNotify, resource),
-		stStore:           stStore,
-		resource:          resource,
-		qosManager:        qosManager,
-		conflictMn:        conflictMn,
-		podInformer:       podInformer,
-		nodeInformer:      nodeInformer,
-		workqueue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "health-check-queue"),
-		ruleCheckInformer: ruleCheckInformer,
-		cgroupInformer:    cgroupInformer,
+		config:                 config,
+		ruleChecker:            rulecheck.NewManager(config.RuleCheck, stStore, resource, qosManager, conflictMn, podInformer, config.PredictReserved),
+		cgroupNotifier:         notify.NewNotifyManager(&config.CgroupNotify, resource),
+		stStore:                stStore,
+		resource:               resource,
+		qosManager:             qosManager,
+		conflictMn:             conflictMn,
+		podInformer:            podInformer,
+		nodeInformer:           nodeInformer,
+		workqueue:              workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "health-check-queue"),
+		ruleCheckInformer:      ruleCheckInformer,
+		cgroupInformer:         cgroupInformer,
+		ruleCheckAvailableFunc: ruleCheckAvailableFunc,
 	}
 
 	_, err := hm.ruleCheckInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -331,7 +335,7 @@ func (h *manager) updateRuleCheckConfig() error {
 		}
 		m[name] = struct{}{}
 		ruleCheck := &types.RuleCheckConfig{}
-		convertK8sRuleCheck(k8sRuleCheck, ruleCheck)
+		h.convertK8sRuleCheck(k8sRuleCheck, ruleCheck)
 		switch k8sRuleCheck.Spec.Type {
 		case v1.AppType:
 			appRuleChecks = append(appRuleChecks, ruleCheck)
@@ -348,7 +352,7 @@ func (h *manager) updateRuleCheckConfig() error {
 }
 
 // convert v1.RuleCheck struct to types.RuleCheckConfig struct
-func convertK8sRuleCheck(k8sRuleCheck *v1.RuleCheck, ruleCheck *types.RuleCheckConfig) {
+func (h *manager) convertK8sRuleCheck(k8sRuleCheck *v1.RuleCheck, ruleCheck *types.RuleCheckConfig) {
 	convertRules := func(k8sRules []*v1.DetectActionRules) []*types.DetectActionConfig {
 		rules := make([]*types.DetectActionConfig, 0, len(k8sRuleCheck.Spec.Rules))
 		for _, k8sRule := range k8sRules {
@@ -385,6 +389,7 @@ func convertK8sRuleCheck(k8sRuleCheck *v1.RuleCheck, ruleCheck *types.RuleCheckC
 	ruleCheck.RecoverInterval = *k8sRuleCheck.Spec.RecoverInterval
 	ruleCheck.HandleInterval = *k8sRuleCheck.Spec.HandleInterval
 	ruleCheck.NodeSelector = k8sRuleCheck.Spec.NodeSelector
+	h.ruleCheckAvailableFunc(ruleCheck)
 }
 
 // determine whether this cr event impacts this node

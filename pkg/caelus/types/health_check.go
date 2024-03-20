@@ -201,6 +201,12 @@ func InitHealthCheckConfigFunc(nodeMetrics *MetricsNodeConfig,
 	}
 }
 
+func RuleCheckAvailableFunc(nodeMetrics *MetricsNodeConfig, predictReserve *Resource) func(ruleCheck *RuleCheckConfig) {
+	return func(ruleCheck *RuleCheckConfig) {
+		ruleCheckAvailable(ruleCheck, nodeMetrics, predictReserve)
+	}
+}
+
 func ruleCheckAvailable(ruleCheck *RuleCheckConfig, nodeMetrics *MetricsNodeConfig, predictReserve *Resource) {
 	if ruleCheck == nil {
 		return
