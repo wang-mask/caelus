@@ -32,59 +32,59 @@ import (
 	cache "k8s.io/client-go/tools/cache"
 )
 
-// RuleCheckInformer provides access to a shared informer and lister for
-// RuleChecks.
-type RuleCheckInformer interface {
+// CgroupNotifyInformer provides access to a shared informer and lister for
+// CgroupNotifies.
+type CgroupNotifyInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1.RuleCheckLister
+	Lister() v1.CgroupNotifyLister
 }
 
-type ruleCheckInformer struct {
+type cgroupNotifyInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
 	tweakListOptions internalinterfaces.TweakListOptionsFunc
 	namespace        string
 }
 
-// NewRuleCheckInformer constructs a new informer for RuleCheck type.
+// NewCgroupNotifyInformer constructs a new informer for CgroupNotify type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewRuleCheckInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
-	return NewFilteredRuleCheckInformer(client, namespace, resyncPeriod, indexers, nil)
+func NewCgroupNotifyInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
+	return NewFilteredCgroupNotifyInformer(client, namespace, resyncPeriod, indexers, nil)
 }
 
-// NewFilteredRuleCheckInformer constructs a new informer for RuleCheck type.
+// NewFilteredCgroupNotifyInformer constructs a new informer for CgroupNotify type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewFilteredRuleCheckInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
+func NewFilteredCgroupNotifyInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
 	return cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.CaelusV1().RuleChecks(namespace).List(context.TODO(), options)
+				return client.CaelusV1().CgroupNotifies(namespace).List(context.TODO(), options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.CaelusV1().RuleChecks(namespace).Watch(context.TODO(), options)
+				return client.CaelusV1().CgroupNotifies(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&caelusv1.RuleCheck{},
+		&caelusv1.CgroupNotify{},
 		resyncPeriod,
 		indexers,
 	)
 }
 
-func (f *ruleCheckInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewFilteredRuleCheckInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
+func (f *cgroupNotifyInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
+	return NewFilteredCgroupNotifyInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
 }
 
-func (f *ruleCheckInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&caelusv1.RuleCheck{}, f.defaultInformer)
+func (f *cgroupNotifyInformer) Informer() cache.SharedIndexInformer {
+	return f.factory.InformerFor(&caelusv1.CgroupNotify{}, f.defaultInformer)
 }
 
-func (f *ruleCheckInformer) Lister() v1.RuleCheckLister {
-	return v1.NewRuleCheckLister(f.Informer().GetIndexer())
+func (f *cgroupNotifyInformer) Lister() v1.CgroupNotifyLister {
+	return v1.NewCgroupNotifyLister(f.Informer().GetIndexer())
 }

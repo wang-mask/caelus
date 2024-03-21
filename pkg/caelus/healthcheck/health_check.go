@@ -20,7 +20,6 @@ import (
 	"sort"
 
 	v1 "github.com/tencent/caelus/pkg/apis/caelus/v1"
-	cgroupCrd "github.com/tencent/caelus/pkg/apis/cgroupnotifycrd/v1"
 	notify "github.com/tencent/caelus/pkg/caelus/healthcheck/cgroupnotify"
 	"github.com/tencent/caelus/pkg/caelus/healthcheck/conflict"
 	"github.com/tencent/caelus/pkg/caelus/healthcheck/rulecheck"
@@ -29,11 +28,9 @@ import (
 	"github.com/tencent/caelus/pkg/caelus/statestore"
 	"github.com/tencent/caelus/pkg/caelus/types"
 	"github.com/tencent/caelus/pkg/caelus/util"
-	cgroupInformer "github.com/tencent/caelus/pkg/cgroupClient/informers/externalversions/cgroupnotifycrd/v1"
 	caelusv1 "github.com/tencent/caelus/pkg/generated/informers/externalversions/caelus/v1"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels2 "k8s.io/apimachinery/pkg/labels"
 	informerv1 "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -66,7 +63,7 @@ type manager struct {
 	podInformer            cache.SharedIndexInformer
 	nodeInformer           informerv1.NodeInformer
 	ruleCheckInformer      caelusv1.RuleCheckInformer
-	cgroupInformer         cgroupInformer.CgroupNotifyCrdInformer
+	cgroupInformer         caelusv1.CgroupNotifyInformer
 	workqueue              workqueue.RateLimitingInterface
 	configHash             string
 	globalStopCh           <-chan struct{}
@@ -77,7 +74,7 @@ type manager struct {
 func NewHealthManager(stStore statestore.StateStore,
 	resource resource.Interface, qosManager qos.Manager, conflictMn conflict.Manager,
 	podInformer cache.SharedIndexInformer, nodeInformer informerv1.NodeInformer,
-	ruleCheckInformer caelusv1.RuleCheckInformer, cgroupInformer cgroupInformer.CgroupNotifyCrdInformer,
+	ruleCheckInformer caelusv1.RuleCheckInformer, cgroupInformer caelusv1.CgroupNotifyInformer,
 	resourceType *types.Resource, ruleCheckAvailableFunc func(ruleCheck *types.RuleCheckConfig)) Manager {
 
 	config := &types.HealthCheckConfig{
@@ -219,11 +216,11 @@ func (h *manager) syncHandler(key string) error {
 		}
 		h.reRunRuleCheck()
 	} else if key == cgroupNotify {
-		//err := h.updateCgroupConfig()
-		//if err != nil{
-		//	return err
-		//}
-		//h.reRunCgroupNotifier()
+		err := h.updateCgroupNotifyConfig()
+		if err != nil {
+			return err
+		}
+		h.reRunCgroupNotifier()
 	}
 
 	klog.Infof("---- After syncHandler %v: %v", key, *h.config)
@@ -256,24 +253,9 @@ func (h *manager) reRunCgroupNotifier() {
 	}
 }
 
-func (h *manager) OnAddCgropNotify(obj interface{}) {
-	h.updateCgroupConfig(obj, false)
-	h.reRunCgroupNotifier()
-}
-
-func (h *manager) OnUpdateCgropNotify(oldObj, newObj interface{}) {
-	h.updateCgroupConfig(newObj, false)
-	h.reRunCgroupNotifier()
-}
-
-func (h *manager) OnDeleteCgropNotify(obj interface{}) {
-	h.updateCgroupConfig(obj, true)
-	h.reRunCgroupNotifier()
-}
-
-func (h *manager) CgroupCrddeepCopy(cgroupCrd *cgroupCrd.CgroupNotifyCrd) {
+func (h *manager) convertK8sCgroupNotify(k8sCgroupNotify *v1.CgroupNotify, cgroupNotify *types.NotifyConfig) {
 	pressures := make([]types.MemoryPressureNotifyConfig, 0)
-	for _, p := range cgroupCrd.Spec.MemoryCgroup.Pressures {
+	for _, p := range k8sCgroupNotify.Spec.MemoryCgroup.Pressures {
 		newP := types.MemoryPressureNotifyConfig{}
 		newP.Cgroups = p.Cgroups
 		newP.Count = p.Count
@@ -282,31 +264,57 @@ func (h *manager) CgroupCrddeepCopy(cgroupCrd *cgroupCrd.CgroupNotifyCrd) {
 		pressures = append(pressures, newP)
 	}
 	usages := make([]types.MemoryUsageNotifyConfig, 0)
-	for _, u := range cgroupCrd.Spec.MemoryCgroup.Usages {
+	for _, u := range k8sCgroupNotify.Spec.MemoryCgroup.Usages {
 		newU := types.MemoryUsageNotifyConfig{}
 		newU.Cgroups = u.Cgroups
 		newU.Duration = u.Duration
 		newU.MarginMb = u.MarginMb
 		usages = append(usages, newU)
 	}
-	h.config.CgroupNotify.MemoryCgroup.Pressures = pressures
-	h.config.CgroupNotify.MemoryCgroup.Usages = usages
-	h.config.CgroupNotify.Labels = cgroupCrd.Spec.NodeSelector.MatchLabels
+	cgroupNotify.MemoryCgroup.Pressures = pressures
+	cgroupNotify.MemoryCgroup.Usages = usages
+	cgroupNotify.Labels = k8sCgroupNotify.Spec.NodeSelector
 }
 
-func (h *manager) updateCgroupConfig(obj interface{}, isDelete bool) {
-	object := obj.(metav1.Object)
-	ownerRef := metav1.GetControllerOf(object)
-	cgroupCrd, err := h.cgroupInformer.Lister().CgroupNotifyCrds(object.GetNamespace()).Get(ownerRef.Name)
-	if err != nil {
-		klog.Error("get cgroupNotifyCrd failed")
-		return
+func (h *manager) mergeCgroupNotify(baseCgNotify, nextCgNotify *types.NotifyConfig) {
+	if len(baseCgNotify.Labels) == 0 {
+		baseCgNotify.Labels = nextCgNotify.Labels
 	}
-	if isDelete {
-		h.config.CgroupNotify = types.NotifyConfig{}
+	if baseCgNotify.MemoryCgroup == nil {
+		baseCgNotify.MemoryCgroup = nextCgNotify.MemoryCgroup
 	} else {
-		h.CgroupCrddeepCopy(cgroupCrd)
+		if len(baseCgNotify.MemoryCgroup.Pressures) == 0 {
+			baseCgNotify.MemoryCgroup.Pressures = nextCgNotify.MemoryCgroup.Pressures
+		}
+		if len(baseCgNotify.MemoryCgroup.Usages) == 0 {
+			baseCgNotify.MemoryCgroup.Usages = nextCgNotify.MemoryCgroup.Usages
+		}
 	}
+}
+
+func (h *manager) updateCgroupNotifyConfig() error {
+	cgroupNotifiers, err := h.cgroupInformer.Lister().CgroupNotifies(types.CaelusNamespace).List(labels2.SelectorFromSet(nil))
+	if err != nil {
+		return err
+	}
+	sort.Slice(cgroupNotifiers, func(i, j int) bool {
+		if *(cgroupNotifiers[i].Spec.Priority) == *(cgroupNotifiers[j].Spec.Priority) {
+			return cgroupNotifiers[i].CreationTimestamp.After(cgroupNotifiers[j].CreationTimestamp.Time)
+		} else {
+			return *(cgroupNotifiers[i].Spec.Priority) > *(cgroupNotifiers[j].Spec.Priority)
+		}
+	})
+	baseCgroupNotify := &types.NotifyConfig{}
+	for _, k8sCgroupNotify := range cgroupNotifiers {
+		if ok, err := h.isLabelMatchedLocalNode(k8sCgroupNotify.Spec.NodeSelector); err != nil || !ok {
+			continue
+		}
+		cgroupNotify := &types.NotifyConfig{}
+		h.convertK8sCgroupNotify(k8sCgroupNotify, cgroupNotify)
+		h.mergeCgroupNotify(baseCgroupNotify, cgroupNotify)
+	}
+	h.config.CgroupNotify = *baseCgroupNotify
+	return nil
 }
 
 // update local RuleCheck
@@ -397,8 +405,8 @@ func (h *manager) convertK8sRuleCheck(k8sRuleCheck *v1.RuleCheck, ruleCheck *typ
 // determine whether this cr event impacts this node
 func (h *manager) isAffectingLocalNode(objs []interface{}) bool {
 	for _, obj := range objs {
-		if cgroupCr, ok := obj.(*cgroupCrd.CgroupNotifyCrd); ok {
-			if matched, err := h.isLabelMatchedLocalNode(cgroupCr.Spec.NodeSelector.MatchLabels); matched || err != nil {
+		if cgroupCr, ok := obj.(*v1.CgroupNotify); ok {
+			if matched, err := h.isLabelMatchedLocalNode(cgroupCr.Spec.NodeSelector); matched || err != nil {
 				return true
 			}
 		} else if ruleCheckCr, ok := obj.(*v1.RuleCheck); ok {

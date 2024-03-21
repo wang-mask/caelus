@@ -9,19 +9,20 @@ import (
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// CgroupNotifyCrd is a specification for a CgroupNotifyCrd resource
-type CgroupNotifyCrd struct {
+// CgroupNotify is a specification for a CgroupNotify resource
+type CgroupNotify struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   CgroupNotifyCrdSpec   `json:"spec"`
-	Status CgroupNotifyCrdStatus `json:"status"`
+	Spec   CgroupNotifySpec   `json:"spec"`
+	Status CgroupNotifyStatus `json:"status"`
 }
 
-// CgroupNotifyCrdSpec is the spec for a CgroupNotifyCrd resource
-type CgroupNotifyCrdSpec struct {
-	MemoryCgroup MemoryNotifyConfig   `json:"memory_cgroup"`
-	NodeSelector metav1.LabelSelector `json:"nodeSelector"`
+// CgroupNotifySpec is the spec for a CgroupNotify resource
+type CgroupNotifySpec struct {
+	MemoryCgroup MemoryNotifyConfig `json:"memory_cgroup"`
+	NodeSelector map[string]string  `json:"nodeSelector"`
+	Priority     *int32             `json:"priority"`
 }
 
 // MemoryNotifyConfig describe memory cgroup notify
@@ -49,17 +50,17 @@ type MemoryUsageNotifyConfig struct {
 	Duration times.Duration `json:"duration"`
 }
 
-// CgroupNotifyCrdStatus is the status for a CgroupNotifyCrd resource
-type CgroupNotifyCrdStatus struct {
+// CgroupNotifyStatus is the status for a CgroupNotify resource
+type CgroupNotifyStatus struct {
 	AvailableReplicas int32 `json:"availableReplicas"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// CgroupNotifyCrdList is a list of CgroupNotifyCrd resources
-type CgroupNotifyCrdList struct {
+// CgroupNotifyList is a list of CgroupNotify resources
+type CgroupNotifyList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`
 
-	Items []CgroupNotifyCrd `json:"items"`
+	Items []CgroupNotify `json:"items"`
 }

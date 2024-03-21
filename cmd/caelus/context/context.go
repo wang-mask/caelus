@@ -18,9 +18,6 @@ package context
 import (
 	"time"
 
-	cgroupclient "github.com/tencent/caelus/pkg/cgroupClient/clientset/versioned"
-	cgroupfake "github.com/tencent/caelus/pkg/cgroupClient/clientset/versioned/fake"
-	cgroupInformers "github.com/tencent/caelus/pkg/cgroupClient/informers/externalversions"
 	caelusclient "github.com/tencent/caelus/pkg/generated/clientset/versioned"
 	caelusfake "github.com/tencent/caelus/pkg/generated/clientset/versioned/fake"
 	caelusinformers "github.com/tencent/caelus/pkg/generated/informers/externalversions"
@@ -42,10 +39,10 @@ type CaelusContext struct {
 	NodeName                string
 	kubeClient              clientset.Interface
 	caelusClient            caelusclient.Interface
-	cgroupNotifyClient      cgroupclient.Interface
+	cgroupNotifyClient      caelusclient.Interface
 	nodeFactory, podFactory informers.SharedInformerFactory
 	caelusFactory           caelusinformers.SharedInformerFactory
-	cgroupNotifyFactory     cgroupInformers.SharedInformerFactory
+	cgroupNotifyFactory     caelusinformers.SharedInformerFactory
 	// TODO add xxx informers
 }
 
@@ -99,9 +96,9 @@ func (c *CaelusContext) lazyInit() {
 			klog.Warning(err)
 			klog.Warning("fall back to creating fake caelus-client")
 			// create a fake client to test caelus without k8s
-			c.cgroupNotifyClient = cgroupfake.NewSimpleClientset()
+			c.cgroupNotifyClient = caelusfake.NewSimpleClientset()
 		} else {
-			c.cgroupNotifyClient = cgroupclient.NewForConfigOrDie(kubeconfig)
+			c.cgroupNotifyClient = caelusclient.NewForConfigOrDie(kubeconfig)
 		}
 	}
 }
@@ -119,7 +116,7 @@ func (c *CaelusContext) GetCaelusClient() caelusclient.Interface {
 }
 
 // GetCaelusClient returns CgroupNotify client
-func (c *CaelusContext) GetCgroupNotifyClient() cgroupclient.Interface {
+func (c *CaelusContext) GetCgroupNotifyClient() caelusclient.Interface {
 	c.lazyInit()
 	return c.cgroupNotifyClient
 }
@@ -147,10 +144,10 @@ func (c *CaelusContext) GetCaelusFactory() caelusinformers.SharedInformerFactory
 }
 
 // GetCaelusFactory returns cgroupnotify factory
-func (c *CaelusContext) GetCgroupNotifyFactory() cgroupInformers.SharedInformerFactory {
+func (c *CaelusContext) GetCgroupNotifyFactory() caelusinformers.SharedInformerFactory {
 	if c.cgroupNotifyFactory == nil {
-		c.cgroupNotifyFactory = cgroupInformers.NewSharedInformerFactoryWithOptions(c.GetCgroupNotifyClient(), informerSyncPeriod,
-			cgroupInformers.WithTweakListOptions(func(options *metav1.ListOptions) {
+		c.cgroupNotifyFactory = caelusinformers.NewSharedInformerFactoryWithOptions(c.GetCgroupNotifyClient(), informerSyncPeriod,
+			caelusinformers.WithTweakListOptions(func(options *metav1.ListOptions) {
 				options.FieldSelector = fields.OneTermEqualSelector(nodeNameField, c.NodeName).String()
 			}))
 	}
