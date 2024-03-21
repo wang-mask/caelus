@@ -141,7 +141,7 @@ func (c *CaelusContext) GetPodFactory() informers.SharedInformerFactory {
 // GetCaelusFactory returns ruleCheck factory
 func (c *CaelusContext) GetCaelusFactory() caelusinformers.SharedInformerFactory {
 	if c.caelusFactory == nil {
-		c.caelusFactory = caelusinformers.NewSharedInformerFactoryWithOptions(c.GetCaelusClient(), informerSyncPeriod)
+		c.caelusFactory = caelusinformers.NewSharedInformerFactoryWithOptions(c.GetCaelusClient(), 0)
 	}
 	return c.caelusFactory
 }
