@@ -39,10 +39,8 @@ type CaelusContext struct {
 	NodeName                string
 	kubeClient              clientset.Interface
 	caelusClient            caelusclient.Interface
-	cgroupNotifyClient      caelusclient.Interface
 	nodeFactory, podFactory informers.SharedInformerFactory
 	caelusFactory           caelusinformers.SharedInformerFactory
-	cgroupNotifyFactory     caelusinformers.SharedInformerFactory
 	// TODO add xxx informers
 }
 
@@ -85,22 +83,6 @@ func (c *CaelusContext) lazyInit() {
 			c.caelusClient = caelusclient.NewForConfigOrDie(kubeconfig)
 		}
 	}
-
-	// init cgroupnotifycrd client
-	if c.cgroupNotifyClient == nil {
-		err = nil
-		if kubeconfig == nil {
-			kubeconfig, err = clientcmd.BuildConfigFromFlags(c.Master, c.Kubeconfig)
-		}
-		if err != nil {
-			klog.Warning(err)
-			klog.Warning("fall back to creating fake caelus-client")
-			// create a fake client to test caelus without k8s
-			c.cgroupNotifyClient = caelusfake.NewSimpleClientset()
-		} else {
-			c.cgroupNotifyClient = caelusclient.NewForConfigOrDie(kubeconfig)
-		}
-	}
 }
 
 // GetKubeClient returns k8s client
@@ -113,12 +95,6 @@ func (c *CaelusContext) GetKubeClient() clientset.Interface {
 func (c *CaelusContext) GetCaelusClient() caelusclient.Interface {
 	c.lazyInit()
 	return c.caelusClient
-}
-
-// GetCaelusClient returns CgroupNotify client
-func (c *CaelusContext) GetCgroupNotifyClient() caelusclient.Interface {
-	c.lazyInit()
-	return c.cgroupNotifyClient
 }
 
 // GetPodFactory returns pod factory
@@ -141,17 +117,6 @@ func (c *CaelusContext) GetCaelusFactory() caelusinformers.SharedInformerFactory
 		c.caelusFactory = caelusinformers.NewSharedInformerFactoryWithOptions(c.GetCaelusClient(), 0)
 	}
 	return c.caelusFactory
-}
-
-// GetCaelusFactory returns cgroupnotify factory
-func (c *CaelusContext) GetCgroupNotifyFactory() caelusinformers.SharedInformerFactory {
-	if c.cgroupNotifyFactory == nil {
-		c.cgroupNotifyFactory = caelusinformers.NewSharedInformerFactoryWithOptions(c.GetCgroupNotifyClient(), informerSyncPeriod,
-			caelusinformers.WithTweakListOptions(func(options *metav1.ListOptions) {
-				options.FieldSelector = fields.OneTermEqualSelector(nodeNameField, c.NodeName).String()
-			}))
-	}
-	return c.cgroupNotifyFactory
 }
 
 // GetNodeFactory returns node factory
@@ -183,9 +148,5 @@ func (c *CaelusContext) Run(stop <-chan struct{}) {
 	if c.caelusFactory != nil {
 		c.caelusFactory.Start(stop)
 		c.caelusFactory.WaitForCacheSync(stop)
-	}
-	if c.cgroupNotifyFactory != nil {
-		c.cgroupNotifyFactory.Start(stop)
-		c.cgroupNotifyFactory.WaitForCacheSync(stop)
 	}
 }
