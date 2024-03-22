@@ -324,10 +324,10 @@ func (h *manager) updateRuleCheckConfig() error {
 		return err
 	}
 	sort.Slice(ruleChecks, func(i, j int) bool {
-		if *(ruleChecks[i].Spec.Priority) == *(ruleChecks[j].Spec.Priority) {
+		if ruleChecks[i].Spec.Priority == ruleChecks[j].Spec.Priority {
 			return ruleChecks[i].CreationTimestamp.Time.After(ruleChecks[j].CreationTimestamp.Time)
 		} else {
-			return *(ruleChecks[i].Spec.Priority) > *(ruleChecks[j].Spec.Priority)
+			return ruleChecks[i].Spec.Priority > ruleChecks[j].Spec.Priority
 		}
 	})
 
