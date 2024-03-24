@@ -293,7 +293,7 @@ func (h *manager) mergeCgroupNotify(baseCgNotify, nextCgNotify *types.NotifyConf
 }
 
 func (h *manager) updateCgroupNotifyConfig() error {
-	cgroupNotifiers, err := h.cgroupInformer.Lister().CgroupNotifies(types.CaelusNamespace).List(labels2.SelectorFromSet(nil))
+	cgroupNotifiers, err := h.cgroupInformer.Lister().CgroupNotifies(corev1.NamespaceAll).List(labels2.Everything())
 	if err != nil {
 		return err
 	}
@@ -319,7 +319,7 @@ func (h *manager) updateCgroupNotifyConfig() error {
 
 // update local RuleCheck
 func (h *manager) updateRuleCheckConfig() error {
-	ruleChecks, err := h.ruleCheckInformer.Lister().RuleChecks(types.CaelusNamespace).List(labels2.SelectorFromSet(nil))
+	ruleChecks, err := h.ruleCheckInformer.Lister().RuleChecks(corev1.NamespaceAll).List(labels2.Everything())
 	if err != nil {
 		return err
 	}
