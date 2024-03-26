@@ -65,7 +65,6 @@ type manager struct {
 	ruleCheckInformer      caelusv1.RuleCheckInformer
 	cgroupInformer         caelusv1.CgroupNotifyInformer
 	workqueue              workqueue.RateLimitingInterface
-	configHash             string
 	globalStopCh           <-chan struct{}
 	ruleCheckAvailableFunc func(ruleCheck *types.RuleCheckConfig)
 }
@@ -298,10 +297,10 @@ func (h *manager) updateCgroupNotifyConfig() error {
 		return err
 	}
 	sort.Slice(cgroupNotifiers, func(i, j int) bool {
-		if *(cgroupNotifiers[i].Spec.Priority) == *(cgroupNotifiers[j].Spec.Priority) {
+		if cgroupNotifiers[i].Spec.Priority == cgroupNotifiers[j].Spec.Priority {
 			return cgroupNotifiers[i].CreationTimestamp.After(cgroupNotifiers[j].CreationTimestamp.Time)
 		} else {
-			return *(cgroupNotifiers[i].Spec.Priority) > *(cgroupNotifiers[j].Spec.Priority)
+			return cgroupNotifiers[i].Spec.Priority > cgroupNotifiers[j].Spec.Priority
 		}
 	})
 	baseCgroupNotify := &types.NotifyConfig{}

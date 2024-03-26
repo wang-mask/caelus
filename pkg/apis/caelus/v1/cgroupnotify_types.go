@@ -22,7 +22,7 @@ type CgroupNotify struct {
 type CgroupNotifySpec struct {
 	MemoryCgroup MemoryNotifyConfig `json:"memory_cgroup"`
 	NodeSelector map[string]string  `json:"nodeSelector"`
-	Priority     *int32             `json:"priority"`
+	Priority     int32              `json:"priority"`
 }
 
 // MemoryNotifyConfig describe memory cgroup notify
