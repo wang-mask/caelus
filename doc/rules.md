@@ -103,7 +103,7 @@ type NodeCpu struct {
 	...
 }
 ```   
-  Node rules example:
+  Node rules json example:
 ```json
       {
         "name": "cpu",
@@ -145,6 +145,46 @@ type NodeCpu struct {
         ]
       }
 ```
+Node rules yaml example:
+```yaml
+apiVersion: caelus.io/v1
+kind: RuleCheck
+metadata:
+  name: caelus-test1
+  namespace: caelus-system
+spec:
+  name: cpu
+  priority: 90
+  nodeSelector:
+    disktype: "ssd"
+  type: node
+  metrics:
+  - cpu_avg
+  checkInterval: 10
+  handleInterval: 10
+  recoverInterval: 15
+  rules:
+  - detects:
+    - name: expression
+      args: |-
+        {
+          "expression": "auto",
+          "warning_count": 10,
+          "warning_duration": "10s"
+        }
+  - actions:
+    - name: adjust
+      args: |-
+        {
+          "resources": [
+            {
+              "step": "1000m"
+            }]
+        }
+    - name: schedule
+      args: |-
+        {}
+```
 
 ### Container rules
   Container rules describe how to detect metrics of container level, the supported metrics could be found from
@@ -158,7 +198,7 @@ type CgroupStats struct {
 }
 ```
 
-  Container rules example:
+  Container rules json example:
 ```json
 {
  "metrics": [
@@ -181,6 +221,34 @@ type CgroupStats struct {
  ]
 }
 ```
+
+Container rules yaml example:
+```yaml
+apiVersion: caelus.io/v1
+kind: RuleCheck
+metadata:
+  name: caelus-test2
+  namespace: caelus-system
+spec:
+  name: cpu
+  priority: 90
+  nodeSelector:
+    disktype: "ssd"
+  type: container
+  metrics:
+  - nr_cpu_throttled
+  checkInterval: 5
+  handleInterval: 10
+  recoverInterval: 15
+  rules:
+  - detects: 
+    - name: expression
+      args: |
+       {
+           "expression": "nr_cpu_throttled > 0"  
+       }
+```
+
 ### App rules
   App rules describe how to detect metrics of app level, the metrics are provided by users themselves, in the way of 
   executable command or http server, the example as flowing: 
