@@ -52,7 +52,6 @@ type MemoryUsageNotifyConfig struct {
 
 // CgroupNotifyStatus is the status for a CgroupNotify resource
 type CgroupNotifyStatus struct {
-	AvailableReplicas int32 `json:"availableReplicas"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -163,114 +163,108 @@ spec:
     listKind: CgroupNotifyList
     plural: cgroupnotifies
     singular: cgroupnotify
-  scope: Cluster
+  scope: Namespaced
   versions:
-    - name: v1
-      schema:
-        openAPIV3Schema:
-          description: CgroupNotify is a specification for a CgroupNotify resource
-          properties:
-            apiVersion:
-              description: |-
-                APIVersion defines the versioned schema of this representation of an object.
-                Servers should convert recognized schemas to the latest internal value, and
-                may reject unrecognized values.
-                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
-              type: string
-            kind:
-              description: |-
-                Kind is a string value representing the REST resource this object represents.
-                Servers may infer this from the endpoint the client submits requests to.
-                Cannot be updated.
-                In CamelCase.
-                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-              type: string
-            metadata:
-              type: object
-            spec:
-              description: CgroupNotifySpec is the spec for a CgroupNotify resource
-              properties:
-                memory_cgroup:
-                  description: MemoryNotifyConfig describe memory cgroup notify
-                  properties:
-                    pressures:
-                      items:
-                        description: MemoryPressureNotifyConfig describe memory.pressure_level
-                          notify data
-                        properties:
-                          cgroups:
-                            items:
-                              type: string
-                            type: array
-                          count:
-                            description: assign event number in the duration time
-                            type: integer
-                          duration:
-                            description: assign time duration the pressure has kept
-                            format: int64
-                            type: integer
-                          pressure_level:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: CgroupNotify is a specification for a CgroupNotify resource
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: CgroupNotifySpec is the spec for a CgroupNotify resource
+            properties:
+              memory_cgroup:
+                description: MemoryNotifyConfig describe memory cgroup notify
+                properties:
+                  pressures:
+                    items:
+                      description: MemoryPressureNotifyConfig describe memory.pressure_level
+                        notify data
+                      properties:
+                        cgroups:
+                          items:
                             type: string
-                        required:
-                          - cgroups
-                          - count
-                          - duration
-                          - pressure_level
-                        type: object
-                      type: array
-                    usages:
-                      items:
-                        description: MemoryUsageNotifyConfig describe memory.usage_in_bytes
-                          notify data
-                        properties:
-                          cgroups:
-                            items:
-                              type: string
-                            type: array
-                          duration:
-                            description: when to handle event after receiving event
-                            format: int64
-                            type: integer
-                          margin_mb:
-                            description: the distance between limit and threshold
-                            type: integer
-                        required:
-                          - cgroups
-                          - duration
-                          - margin_mb
-                        type: object
-                      type: array
-                  required:
-                    - pressures
-                    - usages
-                  type: object
-                nodeSelector:
-                  additionalProperties:
-                    type: string
-                  type: object
-                priority:
-                  format: int32
-                  type: integer
-              required:
-                - memory_cgroup
-                - nodeSelector
-                - priority
-              type: object
-            status:
-              description: CgroupNotifyStatus is the status for a CgroupNotify resource
-              properties:
-                availableReplicas:
-                  format: int32
-                  type: integer
-              required:
-                - availableReplicas
-              type: object
-          required:
-            - spec
-            - status
-          type: object
-      served: true
-      storage: true
+                          type: array
+                        count:
+                          description: assign event number in the duration time
+                          type: integer
+                        duration:
+                          description: assign time duration the pressure has kept
+                          format: int64
+                          type: integer
+                        pressure_level:
+                          type: string
+                      required:
+                      - cgroups
+                      - count
+                      - duration
+                      - pressure_level
+                      type: object
+                    type: array
+                  usages:
+                    items:
+                      description: MemoryUsageNotifyConfig describe memory.usage_in_bytes
+                        notify data
+                      properties:
+                        cgroups:
+                          items:
+                            type: string
+                          type: array
+                        duration:
+                          description: when to handle event after receiving event
+                          format: int64
+                          type: integer
+                        margin_mb:
+                          description: the distance between limit and threshold
+                          type: integer
+                      required:
+                      - cgroups
+                      - duration
+                      - margin_mb
+                      type: object
+                    type: array
+                required:
+                - pressures
+                - usages
+                type: object
+              nodeSelector:
+                additionalProperties:
+                  type: string
+                type: object
+              priority:
+                format: int32
+                type: integer
+            required:
+            - memory_cgroup
+            - nodeSelector
+            - priority
+            type: object
+          status:
+            description: CgroupNotifyStatus is the status for a CgroupNotify resource
+            type: object
+        required:
+        - spec
+        - status
+        type: object
+    served: true
+    storage: true
 ---
 apiVersion: v1
 kind: ServiceAccount
