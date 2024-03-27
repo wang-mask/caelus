@@ -18,6 +18,7 @@ package health
 import (
 	"reflect"
 	"sort"
+	"time"
 
 	v1 "github.com/tencent/caelus/pkg/apis/caelus/v1"
 	notify "github.com/tencent/caelus/pkg/caelus/healthcheck/cgroupnotify"
@@ -29,6 +30,7 @@ import (
 	"github.com/tencent/caelus/pkg/caelus/types"
 	"github.com/tencent/caelus/pkg/caelus/util"
 	caelusv1 "github.com/tencent/caelus/pkg/generated/informers/externalversions/caelus/v1"
+	"github.com/tencent/caelus/pkg/util/times"
 
 	corev1 "k8s.io/api/core/v1"
 	labels2 "k8s.io/apimachinery/pkg/labels"
@@ -393,10 +395,10 @@ func (h *manager) convertK8sRuleCheck(k8sRuleCheck *v1.RuleCheck, ruleCheck *typ
 
 	ruleCheck.Name = k8sRuleCheck.Name
 	ruleCheck.Metrics = k8sRuleCheck.Spec.Metrics
-	ruleCheck.CheckInterval = *k8sRuleCheck.Spec.CheckInterval
 
-	ruleCheck.RecoverInterval = *k8sRuleCheck.Spec.RecoverInterval
-	ruleCheck.HandleInterval = *k8sRuleCheck.Spec.HandleInterval
+	ruleCheck.CheckInterval = *k8sRuleCheck.Spec.CheckInterval * times.Duration(time.Second)
+	ruleCheck.RecoverInterval = *k8sRuleCheck.Spec.RecoverInterval * times.Duration(time.Second)
+	ruleCheck.HandleInterval = *k8sRuleCheck.Spec.HandleInterval * times.Duration(time.Second)
 	ruleCheck.NodeSelector = k8sRuleCheck.Spec.NodeSelector
 	h.ruleCheckAvailableFunc(ruleCheck)
 }
