@@ -136,7 +136,6 @@ spec:
                 - handleInterval
                 - metrics
                 - name
-                - priority
                 - recoverInterval
                 - rules
                 - type
