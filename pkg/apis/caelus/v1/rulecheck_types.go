@@ -38,14 +38,14 @@ type RuleCheck struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	Spec   RuleCheckSpec   `json:"spec"`
-	Status RuleCheckStatus `json:"status"`
+	Status RuleCheckStatus `json:"status,omitempty"`
 }
 
 // RuleCheckSpec is the spec for a RuleCheck resource
 type RuleCheckSpec struct {
 	Name         string            `json:"name"`
-	NodeSelector map[string]string `json:"nodeSelector"`
-	Priority     int32             `json:"priority"`
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	Priority     int32             `json:"priority,omitempty"`
 	Type         RuleCheckType     `json:"type"`
 	Metrics      []string          `json:"metrics"`
 
