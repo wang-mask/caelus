@@ -260,7 +260,7 @@ func (h *manager) convertK8sCgroupNotify(k8sCgroupNotify *v1.CgroupNotify, cgrou
 		newP := types.MemoryPressureNotifyConfig{}
 		newP.Cgroups = p.Cgroups
 		newP.Count = p.Count
-		newP.Duration = p.Duration
+		newP.Duration = p.Duration * times.Duration(time.Millisecond)
 		newP.PressureLevel = p.PressureLevel
 		pressures = append(pressures, newP)
 	}
@@ -268,7 +268,7 @@ func (h *manager) convertK8sCgroupNotify(k8sCgroupNotify *v1.CgroupNotify, cgrou
 	for _, u := range k8sCgroupNotify.Spec.MemoryCgroup.Usages {
 		newU := types.MemoryUsageNotifyConfig{}
 		newU.Cgroups = u.Cgroups
-		newU.Duration = u.Duration
+		newU.Duration = u.Duration * times.Duration(time.Millisecond)
 		newU.MarginMb = u.MarginMb
 		usages = append(usages, newU)
 	}
