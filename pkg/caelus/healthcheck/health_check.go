@@ -305,7 +305,14 @@ func (h *manager) updateCgroupNotifyConfig() error {
 			return cgroupNotifiers[i].Spec.Priority > cgroupNotifiers[j].Spec.Priority
 		}
 	})
-	baseCgroupNotify := &types.NotifyConfig{}
+
+	memoryconfig := &types.MemoryNotifyConfig{
+		Pressures: make([]types.MemoryPressureNotifyConfig, 0),
+		Usages:    make([]types.MemoryUsageNotifyConfig, 0),
+	}
+	baseCgroupNotify := &types.NotifyConfig{
+		MemoryCgroup: memoryconfig,
+	}
 	for _, k8sCgroupNotify := range cgroupNotifiers {
 		if ok, err := h.isLabelMatchedLocalNode(k8sCgroupNotify.Spec.NodeSelector); err != nil || !ok {
 			continue

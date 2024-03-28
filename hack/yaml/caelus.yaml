@@ -154,9 +154,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.14.0
-  name: cgroupnotifies.caelus.io
+  name: cgroupnotifies.caelus.io.caelus.io
 spec:
-  group: caelus.io
+  group: caelus.io.caelus.io
   names:
     kind: CgroupNotify
     listKind: CgroupNotifyList
@@ -252,15 +252,12 @@ spec:
                 type: integer
             required:
             - memory_cgroup
-            - nodeSelector
-            - priority
             type: object
           status:
             description: CgroupNotifyStatus is the status for a CgroupNotify resource
             type: object
         required:
         - spec
-        - status
         type: object
     served: true
     storage: true
