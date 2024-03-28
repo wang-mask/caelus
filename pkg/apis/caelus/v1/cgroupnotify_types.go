@@ -15,14 +15,14 @@ type CgroupNotify struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	Spec   CgroupNotifySpec   `json:"spec"`
-	Status CgroupNotifyStatus `json:"status"`
+	Status CgroupNotifyStatus `json:"status,omitempty"`
 }
 
 // CgroupNotifySpec is the spec for a CgroupNotify resource
 type CgroupNotifySpec struct {
 	MemoryCgroup MemoryNotifyConfig `json:"memory_cgroup"`
-	NodeSelector map[string]string  `json:"nodeSelector"`
-	Priority     int32              `json:"priority"`
+	NodeSelector map[string]string  `json:"nodeSelector,omitempty"`
+	Priority     int32              `json:"priority,omitempty"`
 }
 
 // MemoryNotifyConfig describe memory cgroup notify
