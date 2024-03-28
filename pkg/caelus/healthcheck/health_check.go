@@ -293,6 +293,17 @@ func (h *manager) mergeCgroupNotify(baseCgNotify, nextCgNotify *types.NotifyConf
 	}
 }
 
+func newMemoryNotifyConfig() *types.NotifyConfig {
+	memoryconfig := &types.MemoryNotifyConfig{
+		Pressures: make([]types.MemoryPressureNotifyConfig, 0),
+		Usages:    make([]types.MemoryUsageNotifyConfig, 0),
+	}
+	cgroupNotify := &types.NotifyConfig{
+		MemoryCgroup: memoryconfig,
+	}
+	return cgroupNotify
+}
+
 func (h *manager) updateCgroupNotifyConfig() error {
 	cgroupNotifiers, err := h.cgroupInformer.Lister().CgroupNotifies(corev1.NamespaceAll).List(labels2.Everything())
 	if err != nil {
@@ -306,18 +317,12 @@ func (h *manager) updateCgroupNotifyConfig() error {
 		}
 	})
 
-	memoryconfig := &types.MemoryNotifyConfig{
-		Pressures: make([]types.MemoryPressureNotifyConfig, 0),
-		Usages:    make([]types.MemoryUsageNotifyConfig, 0),
-	}
-	baseCgroupNotify := &types.NotifyConfig{
-		MemoryCgroup: memoryconfig,
-	}
+	baseCgroupNotify := newMemoryNotifyConfig()
 	for _, k8sCgroupNotify := range cgroupNotifiers {
 		if ok, err := h.isLabelMatchedLocalNode(k8sCgroupNotify.Spec.NodeSelector); err != nil || !ok {
 			continue
 		}
-		cgroupNotify := &types.NotifyConfig{}
+		cgroupNotify := newMemoryNotifyConfig()
 		h.convertK8sCgroupNotify(k8sCgroupNotify, cgroupNotify)
 		h.mergeCgroupNotify(baseCgroupNotify, cgroupNotify)
 	}
