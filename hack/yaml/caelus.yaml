@@ -154,9 +154,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.14.0
-  name: cgroupnotifies.caelus.io.caelus.io
+  name: cgroupnotifies.caelus.io
 spec:
-  group: caelus.io.caelus.io
+  group: caelus.io
   names:
     kind: CgroupNotify
     listKind: CgroupNotifyList
