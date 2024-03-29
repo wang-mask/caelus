@@ -1,9 +1,12 @@
 # Detection configuration
 
-  Caelus dynamically checks abnormalities of various metrics based on [rules.json](../hack/config/rules.json), such as CPU 
+  Caelus dynamically checks abnormalities of various metrics based on CRDs of `RuleCheck` and `CgroupNotify`
+  , such as CPU 
   usage or online latency, to make sure online jobs run normally. Batch jobs will be throttled or even killed if 
   interference detected.
-  This document describes how to configure [rules.json](../hack/config/rules.json)
+  This document describes how to configure these CRDs.
+
+  > **Attention**: Multiple `RuleCheck` or `CgroupNotify` can exist in a cluster, and they will be merged based on the set priority and creation time.
 
 ## 1.Rules
   Rules are used to assign the algorithm to check if the timed metrics have significant fluctuations, such as EWMA, 
@@ -426,5 +429,4 @@ spec:
       - cgroups: ["/kubepods/offline/test"]
         margin_mb: 2048
         duration: 60000
-status: {}
 ```
