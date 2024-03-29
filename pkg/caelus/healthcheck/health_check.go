@@ -86,6 +86,7 @@ func NewHealthManager(stStore statestore.StateStore,
 		},
 		PredictReserved: resourceType,
 	}
+
 	hm := &manager{
 		config:                 config,
 		ruleChecker:            rulecheck.NewManager(config.RuleCheck, stStore, resource, qosManager, conflictMn, podInformer, config.PredictReserved),
@@ -201,6 +202,7 @@ func (h *manager) processNextWorkItem() bool {
 	}
 
 	if err := h.syncHandler(key); err != nil {
+		klog.Error("Health check module failed to handle ", key, err)
 		h.workqueue.Add(key)
 	}
 
@@ -209,7 +211,7 @@ func (h *manager) processNextWorkItem() bool {
 }
 
 func (h *manager) syncHandler(key string) error {
-	klog.Infof("---- Start syncHandler %v: %v", key, *h.config)
+	klog.Infof("Start syncHandler %v", key)
 	if key == ruleCheck {
 		err := h.updateRuleCheckConfig()
 		if err != nil {
@@ -224,7 +226,7 @@ func (h *manager) syncHandler(key string) error {
 		h.reRunCgroupNotifier()
 	}
 
-	klog.Infof("---- After syncHandler %v: %v", key, *h.config)
+	klog.Infof("After syncHandler %v: %v")
 	return nil
 }
 
