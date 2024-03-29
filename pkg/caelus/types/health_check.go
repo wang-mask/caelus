@@ -143,7 +143,6 @@ type ActionConfig struct {
 // NotifyConfig monitor resource by kernel notify
 type NotifyConfig struct {
 	MemoryCgroup *MemoryNotifyConfig `json:"memory_cgroup"`
-	Labels       map[string]string   `json:"labels"`
 }
 
 // MemoryNotifyConfig describe memory cgroup notify

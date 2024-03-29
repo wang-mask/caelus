@@ -274,13 +274,9 @@ func (h *manager) convertK8sCgroupNotify(k8sCgroupNotify *v1.CgroupNotify, cgrou
 	}
 	cgroupNotify.MemoryCgroup.Pressures = pressures
 	cgroupNotify.MemoryCgroup.Usages = usages
-	cgroupNotify.Labels = k8sCgroupNotify.Spec.NodeSelector
 }
 
 func (h *manager) mergeCgroupNotify(baseCgNotify, nextCgNotify *types.NotifyConfig) {
-	if len(baseCgNotify.Labels) == 0 {
-		baseCgNotify.Labels = nextCgNotify.Labels
-	}
 	if baseCgNotify.MemoryCgroup == nil {
 		baseCgNotify.MemoryCgroup = nextCgNotify.MemoryCgroup
 	} else {
