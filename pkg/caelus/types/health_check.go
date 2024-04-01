@@ -109,7 +109,7 @@ type RuleCheckConfig struct {
 	Name         string            `json:"name"`
 	NodeSelector map[string]string `json:"node_selector"`
 	Metrics      []string          `json:"metrics"`
-	Labels       map[string]string `json:"labels"`
+
 	// CheckInterval describes the interval to trigger detection
 	CheckInterval times.Duration `json:"check_interval"`
 	// HandleInterval describes the interval to handle conflicts after detecting abnormal result
@@ -143,7 +143,6 @@ type ActionConfig struct {
 // NotifyConfig monitor resource by kernel notify
 type NotifyConfig struct {
 	MemoryCgroup *MemoryNotifyConfig `json:"memory_cgroup"`
-	Labels       map[string]string   `json:"labels"`
 }
 
 // MemoryNotifyConfig describe memory cgroup notify
